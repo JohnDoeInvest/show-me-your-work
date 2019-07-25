@@ -25,14 +25,18 @@ function checkSuiteEvent (req) {
   }
 
   const checkSuite = req.body.check_suite
-  if (checkSuite.pull_requests.length > 0) {
-    const pullRequest = checkSuite.pull_requests[0]
-    const deployId = utils.getIdFromPullRequest(pullRequest)
+  if (checkSuite.status === 'completed' && checkSuite.conclusion === 'success') {
+    if (checkSuite.pull_requests.length > 0) {
+      const pullRequest = checkSuite.pull_requests[0]
+      const deployId = utils.getIdFromPullRequest(pullRequest)
 
-    return deploy(deployId, req.body.repository, checkSuite.head_branch, checkSuite.head_sha)
+      return deploy(deployId, req.body.repository, checkSuite.head_branch, checkSuite.head_sha)
+    } else {
+      // const deployId = utils.getIdFromBranch(checkSuite.head_branch)
+      // Ignore branches for now, not sure how we should handle them
+      return Promise.resolve()
+    }
   } else {
-    // const deployId = utils.getIdFromBranch(checkSuite.head_branch)
-    // Ignore branches for now, not sure how we should handle them
     return Promise.resolve()
   }
 }
