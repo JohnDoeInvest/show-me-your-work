@@ -9,7 +9,8 @@
   "author": "Henrik Olsson",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.17.1"
+    "express": "^4.17.1",
+    "ioredis": "^4.11.2"
   },
   "devDependencies": {
     "eslint": "^6.1.0",
