@@ -19,11 +19,11 @@ app.use((req, res, next) => {
 
 app.post('/', (req, res) => {
   const eventType = req.header('X-GitHub-Event')
+  res.sendStatus(200)
+
   return handleEvent(eventType, req)
-    .then(() => res.sendStatus(200))
     .catch(err => {
       console.error(err)
-      res.sendStatus(500)
     })
 })
 

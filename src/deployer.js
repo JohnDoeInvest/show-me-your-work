@@ -62,27 +62,31 @@ function deploy (deployId, repository, branch, sha) {
         return getAvailablePort()
           .then((port) => {
             // Create a new deployment
-            console.log('DEPLOYED')
+            console.log('STARTING DEPLOY')
             redis.set(deployId, port)
             childProcess.execSync(`git clone --depth=50 --branch=${branch} ${url} deploys/${deployId}`)
             childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm install && npm run build:stage`)
             childProcess.execSync(`cd deploys/${deployId} && PORT=${port} NODE_ENV=stage pm2 start ./src/server --name frontend-${deployId} --env stage`)
+            console.log('FINISHED DEPLOY')
             return Promise.resolve()
           })
       }
 
       // We already have a deployment running so we should update that
-      console.log('RE-DEPLOYED')
+      console.log('STARTING RE-DEPLOY')
       childProcess.execSync(`cd deploys/${deployId} && git fetch`)
       childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm install && npm run build:stage`)
       childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} NODE_ENV=stage pm2 restart frontend-${deployId}`)
+      console.log('FINISHED RE-DEPLOY')
       return Promise.resolve()
     })
 }
 
 function removeDeployment (deployId) {
   console.log('REMOVED DEPLOYMENT')
-  return redis.del(deployId)
+  return redis.del(deployId).then(() => {
+    childProcess.exec(`pm2 delete frontend-${deployId} && rm -r deploys/${deployId}`)
+  })
 }
 
 function getAvailablePort () {
