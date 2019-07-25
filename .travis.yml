@@ -1,0 +1,21 @@
+language: node_js
+node_js:
+  - 'node'
+  - '10'
+  - '9'
+  - '8'
+matrix:
+  include:
+    - node_js: node
+
+# Create a NPM Audit job
+jobs:
+  include:
+    - stage: NPM audit
+      script: npm audit
+      node_js: node
+
+# Run npm audit before tests
+stages:
+  - NPM audit
+  - test
