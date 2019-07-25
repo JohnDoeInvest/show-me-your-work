@@ -3,8 +3,6 @@ const utils = require('./utils')
 const deployer = require('./deployer')
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'testing'
-// const GITHUB_USERNAME = process.env.GITHUB_USERNAME
-// const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
 const PORT = process.env.PORT || 3000
 
 const app = express()

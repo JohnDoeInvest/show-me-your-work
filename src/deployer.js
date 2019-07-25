@@ -5,6 +5,8 @@ const net = require('net')
 const redis = new Redis()
 const childProcess = require('child_process')
 
+const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
+
 function pullRequestEvent (req) {
   // TODO: When a PR is re-opened it would be nice if it was deployed again, the issues is that the
   // Check Suite doesn't run again. So we would have to do it on the re-open but also check that
@@ -52,6 +54,8 @@ function deleteEvent (req) {
 }
 
 function deploy (deployId, repository, branch, sha) {
+  const url = repository.clone_url.replace('https://github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@github.com')
+
   return redis.get(deployId)
     .then(currentPort => {
       if (currentPort === null) {
@@ -60,7 +64,7 @@ function deploy (deployId, repository, branch, sha) {
             // Create a new deployment
             console.log('DEPLOYED')
             redis.set(deployId, port)
-            childProcess.execSync(`git clone --depth=50 --branch=${branch} ${repository.clone_url} deploys/${deployId}`)
+            childProcess.execSync(`git clone --depth=50 --branch=${branch} ${url} deploys/${deployId}`)
             childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm install && npm run build:stage`)
             childProcess.execSync(`cd deploys/${deployId} && PORT=${port} NODE_ENV=stage pm2 start ./src/server --name frontend-${deployId} --env stage`)
             return Promise.resolve()
