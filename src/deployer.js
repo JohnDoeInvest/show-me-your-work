@@ -3,8 +3,12 @@ const utils = require('./utils')
 const Redis = require('ioredis')
 const net = require('net')
 const redis = new Redis()
+const childProcess = require('child_process')
 
 function pullRequestEvent (req) {
+  // TODO: When a PR is re-opened it would be nice if it was deployed again, the issues is that the
+  // Check Suite doesn't run again. So we would have to do it on the re-open but also check that
+  // all checks have been ran somehow.
   const deployId = utils.getIdFromPullRequest(req.body)
   if (req.body.action === 'closed') {
     return removeDeployment(deployId)
@@ -19,14 +23,16 @@ function checkSuiteEvent (req) {
   }
 
   const checkSuite = req.body.check_suite
-  let deployId
   if (checkSuite.pull_requests.length > 0) {
-    deployId = utils.getIdFromPullRequest(req.body)
-  } else {
-    deployId = utils.getIdFromBranch(checkSuite.head_branch)
-  }
+    const pullRequest = checkSuite.pull_requests[0]
+    const deployId = utils.getIdFromPullRequest(pullRequest)
 
-  return deploy(deployId)
+    return deploy(deployId, req.body.repository, pullRequest.head_branch, pullRequest.head_sha)
+  } else {
+    // const deployId = utils.getIdFromBranch(checkSuite.head_branch)
+    // Ignore branches for now, not sure how we should handle them
+    return Promise.resolve()
+  }
 }
 
 function pushEvent (req) {
@@ -45,27 +51,34 @@ function deleteEvent (req) {
   return removeDeployment(deployId)
 }
 
-function deploy (deployId) {
+function deploy (deployId, repository, branch, sha) {
   return redis.get(deployId)
     .then(currentPort => {
-      if (currentPort === undefined) {
+      if (currentPort === null) {
         return getAvailablePort()
           .then((port) => {
             // Create a new deployment
             console.log('DEPLOYED')
             redis.set(deployId, port)
+            childProcess.execSync(`git clone --depth=50 --branch=${branch} ${repository.clone_url} deploys/${deployId}`)
+            childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm install && npm run build:stage`)
+            childProcess.execSync(`cd deploys/${deployId} && PORT=${port} NODE_ENV=stage pm2 start ./src/server --name frontend-${deployId} --env stage`)
+            return Promise.resolve()
           })
       }
 
       // We already have a deployment running so we should update that
       console.log('RE-DEPLOYED')
+      childProcess.execSync(`cd deploys/${deployId} && git fetch`)
+      childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm install && npm run build:stage`)
+      childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} NODE_ENV=stage pm2 restart frontend-${deployId}`)
       return Promise.resolve()
     })
 }
 
 function removeDeployment (deployId) {
-  redis.del(deployId)
   console.log('REMOVED DEPLOYMENT')
+  return redis.del(deployId)
 }
 
 function getAvailablePort () {

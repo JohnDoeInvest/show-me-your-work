@@ -14,7 +14,7 @@ function verifySignature (req, payloadBody, secret) {
 }
 
 function getIdFromPullRequest (pullRequest) {
-  return 'pr-' + pullRequest
+  return 'pr-' + pullRequest.number
 }
 
 function getIdFromBranch (ref) {
