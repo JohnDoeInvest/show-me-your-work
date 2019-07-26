@@ -2,7 +2,6 @@
 const utils = require('./utils')
 const Redis = require('ioredis')
 const net = require('net')
-const redis = new Redis()
 const childProcess = require('child_process')
 const fs = require('fs')
 
@@ -10,6 +9,13 @@ const DEPLOY_PULL_REQUESTS = (process.env.DEPLOY_PULL_REQUESTS === 'true') || tr
 const DEPLOY_BRANCHES = (process.env.DEPLOY_BRANCHES === 'true') || false
 const BRANCH_BLACKLIST = process.env.BRANCH_BLACKLIST === undefined ? [] : process.env.BRANCH_BLACKLIST.split(',')
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost'
+const REDIS_PORT = process.env.REDIS_PORT || 6379
+
+const redis = new Redis({
+  host: REDIS_HOST,
+  port: REDIS_PORT
+})
 
 function pullRequestEvent (req) {
   // TODO: When a PR is re-opened it would be nice if it was deployed again, the issues is that the
