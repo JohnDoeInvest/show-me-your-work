@@ -101,6 +101,7 @@ function deploy (deployId, repository, branch, sha) {
       const config = JSON.parse(fs.readFileSync(`deploys/${deployId}/show-me-your-work.json`, 'utf-8'))
       const envs = Object.entries(config.env).map(([key, val]) => `${key}=${val}`).join(' ')
 
+      childProcess.execSync(`cd deploys/${deployId} && ${config.pre.join(' && ')}`)
       childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} ${envs} pm2 restart frontend-${deployId}`)
       console.log('FINISHED RE-DEPLOY')
       return Promise.resolve()
