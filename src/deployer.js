@@ -4,6 +4,7 @@ const Redis = require('ioredis')
 const net = require('net')
 const redis = new Redis()
 const childProcess = require('child_process')
+const fs = require('fs')
 
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
 
@@ -59,7 +60,6 @@ function deleteEvent (req) {
 
 function deploy (deployId, repository, branch, sha) {
   const url = repository.clone_url.replace('https://github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@github.com')
-
   return redis.get(deployId)
     .then(currentPort => {
       if (currentPort === null) {
@@ -69,8 +69,20 @@ function deploy (deployId, repository, branch, sha) {
             console.log('STARTING DEPLOY')
             redis.set(deployId, port)
             childProcess.execSync(`git clone --depth=50 --branch=${branch} ${url} deploys/${deployId}`)
-            childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm install && npm run build:stage`)
-            childProcess.execSync(`cd deploys/${deployId} && PORT=${port} NODE_ENV=stage pm2 start ./src/server --name frontend-${deployId} --env stage`)
+            childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`)
+
+            const hasConfig = fs.existsSync(`deploys/${deployId}/show-me-your-work.json`)
+            if (!hasConfig) {
+              return removeDeployment(deployId)
+            }
+
+            const config = JSON.parse(fs.readFileSync(`deploys/${deployId}/show-me-your-work.json`, 'utf-8'))
+            const envs = Object.entries(config.env).map(([key, val]) => `${key}=${val}`).join(' ')
+
+            // TODO: Make the envs object a string with the following format 'key1=val1 key2=val2'
+            childProcess.execSync(`cd deploys/${deployId} && ${config.pre.join(' && ')}`)
+            childProcess.execSync(`cd deploys/${deployId} && PORT=${port} ${envs} pm2 start ${config.startFile} --name frontend-${deployId}`)
+
             console.log('FINISHED DEPLOY')
             return Promise.resolve()
           })
@@ -79,8 +91,17 @@ function deploy (deployId, repository, branch, sha) {
       // We already have a deployment running so we should update that
       console.log('STARTING RE-DEPLOY')
       childProcess.execSync(`cd deploys/${deployId} && git fetch`)
-      childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm install && npm run build:stage`)
-      childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} NODE_ENV=stage pm2 restart frontend-${deployId}`)
+      childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`)
+
+      const hasConfig = fs.existsSync(`deploys/${deployId}/show-me-your-work.json`)
+      if (!hasConfig) {
+        return removeDeployment(deployId)
+      }
+
+      const config = JSON.parse(fs.readFileSync(`deploys/${deployId}/show-me-your-work.json`, 'utf-8'))
+      const envs = Object.entries(config.env).map(([key, val]) => `${key}=${val}`).join(' ')
+
+      childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} ${envs} pm2 restart frontend-${deployId}`)
       console.log('FINISHED RE-DEPLOY')
       return Promise.resolve()
     })
@@ -93,6 +114,11 @@ function removeDeployment (deployId) {
   })
 }
 
+/**
+ * Starts a server with the port 0 which makes the OS automatically assign a port to the server.
+ * This means that the port was ("is") free on the OS. We get the port from the server and close
+ * is again. We now have a port which is not used by anything on the system.
+ */
 function getAvailablePort () {
   return new Promise((resolve, reject) => {
     const server = net.createServer()
