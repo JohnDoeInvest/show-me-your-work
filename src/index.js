@@ -33,8 +33,6 @@ function handleEvent (eventType, req) {
       return deployer.pullRequestEvent(req)
     case 'check_suite':
       return deployer.checkSuiteEvent(req)
-    case 'push':
-      return deployer.pushEvent(req)
     case 'delete':
       return deployer.deleteEvent(req)
     default:
