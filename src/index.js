@@ -36,7 +36,8 @@ function handleEvent (eventType, req) {
     case 'delete':
       return deployer.deleteEvent(req)
     default:
-      return Promise.reject(new Error('Unknown event'))
+      // Just ignore the event
+      return Promise.resolve()
   }
 }
 
