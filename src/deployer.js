@@ -7,6 +7,7 @@ const fs = require('fs')
 
 const DEPLOY_PULL_REQUESTS = (process.env.DEPLOY_PULL_REQUESTS === 'true') || true
 const DEPLOY_BRANCHES = (process.env.DEPLOY_BRANCHES === 'true') || false
+// eslint-disable-next-line no-unused-vars
 const BRANCH_BLACKLIST = process.env.BRANCH_BLACKLIST === undefined ? [] : process.env.BRANCH_BLACKLIST.split(',')
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost'
@@ -45,12 +46,20 @@ function checkSuiteEvent (req) {
 
       return deploy(deployId, req.body.repository, checkSuite.head_branch, checkSuite.head_sha)
     } else if (DEPLOY_BRANCHES) {
+      // TODO: If branch A is pushed to the repository it will be checked. When branch B, with the
+      // same commit at the head is pushed (or a already checked commit is the head) we will get
+      // that check_suite, so instead of branch B we get branch A. The only way to get around this
+      // would be to listen for a push and then wait for the check_run.
+
+      /*
       const deployId = utils.getIdFromBranch(checkSuite.head_branch)
       if (BRANCH_BLACKLIST.includes(checkSuite.head_branch)) {
         return Promise.resolve()
       }
 
       return deploy(deployId, req.body.repository, checkSuite.head_branch, checkSuite.head_sha)
+      */
+      return Promise.resolve()
     }
   }
 
