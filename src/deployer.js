@@ -104,7 +104,7 @@ function deploy (deployId, repository, branch, sha) {
       return getConfig(deployId)
         .then(config => {
           childProcess.execSync(`cd deploys/${deployId} && ${config.pres}`)
-          childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} ${config.envs} pm2 restart frontend-${deployId}`)
+          childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} ${config.envs} pm2 restart frontend-${deployId} --update-env`)
           console.log('FINISHED RE-DEPLOY - ' + deployId)
           return Promise.resolve()
         })
