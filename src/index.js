@@ -31,8 +31,8 @@ function handleEvent (eventType, req) {
   switch (eventType) {
     case 'pull_request':
       return deployer.pullRequestEvent(req)
-    case 'check_suite':
-      return deployer.checkSuiteEvent(req)
+    case 'check_run':
+      return deployer.checkRunEvent(req)
     case 'delete':
       return deployer.deleteEvent(req)
     default:
