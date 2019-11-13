@@ -26,8 +26,30 @@ Next, we needed to find a way to dynamically update the NGINX configuration. Obv
 Since LUA in NGINX supports the Redis database – this was the final piece of the puzzle. 
 
 Effectively, the Redis database holds a mapping between “subdomain” and “upstream server port”. The “Show me your work” scripts updates the database and NGINX uses this to map incoming requests.
- 
-## Installation – custom build
+
+## Server requirements
+* Node
+* Nginx, [custom build](#custom-nginx-build)
+* Redis
+
+## Installation
+Assuming you have the above requirements installed you need to setup the Nginx config, we have a sample one [here](#configuration---single-server). Then we only need to add the show-me-your-work code. So clone the repository and run `npm install`. After that you start the server with `node src/index.js`, you can pass options via the following environment variables.
+
+| Name | Description | Default |
+| --- | --- | --- |
+| PORT | The port to listen at | 3000 |
+| WEBHOOK_SECRET | The GitHub webhook secret | |
+| GITHUB_ACCESS_TOKEN | An access token to GitHub, required to fetch from private repositories | |
+| DEPLOY_PULL_REQUESTS | Should the application deploy pull requests | true |
+| DEPLOY_BRANCHES | Should the application deploy branches | false |
+| BRANCH_BLACKLIST | Which branches should we not deploy, comma seperated names | |
+| REDIS_HOST | What host Redis is running on | localhost |
+| REDIS_PORT | What port Redis is running on  | 6379 |
+
+## Subdomain structure
+The subdomians have prefixes so as to not clash. Branches have the subdomain structure of `branch-BRANCH_NAME` and pull requests have the structure of `pr-PR_NUMBER`. So if we run the server on `example.com` the pull request with number 1 would be reached at `pr-1.example.com`
+
+## Custom Nginx build
 NOTE: Below we compile NGINX and the Openresty module (https://openresty.org/en/) from source because we use a couple of custom components. This is overly complicated – we know. We hope that people that are used to working with Openresty will jump in and create another installation section based on the official releases. In theory it should only be to install Openresty, Redis and then jump to configuration...
 
 NOTE2: We use Centos for all servers so commands/paths assumes this.
