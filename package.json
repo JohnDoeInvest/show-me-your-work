@@ -10,7 +10,9 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.17.1",
-    "ioredis": "^4.11.2"
+    "express-sse": "^0.5.1",
+    "ioredis": "^4.11.2",
+    "pug": "^2.0.4"
   },
   "devDependencies": {
     "eslint": "^6.1.0",
