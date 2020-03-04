@@ -104,7 +104,7 @@ function deploy (deployId, repository, branch, sha) {
 
 function removeDeployment (deployId) {
   console.log('REMOVED DEPLOYMENT - ' + deployId)
-  return redis.del(deployId, deployId + 'STATUS').then(() => {
+  return redis.del(deployId, deployId + '-STATUS').then(() => {
     childProcess.exec(`pm2 delete frontend-${deployId} && rm -r deploys/${deployId}`)
   })
 }
