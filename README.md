@@ -1,6 +1,6 @@
 # Show Me Your Work! [![Sponsor](https://johndoeinvest.com/logo-jdi-tag.png)](https://johndoeinvest.com/) [![Build status](https://api.travis-ci.com/JohnDoeInvest/show-me-your-work.svg?branch=master)](https://travis-ci.com/JohnDoeInvest/show-me-your-work)
 
-Nothing is more detrimental to an organization than not being able to see and follow progress. 
+Nothing is more detrimental to an organization than not being able to see and follow progress.
 
 Recognize this? Someone identifies a need for a new feature. The requestor spends a lot of time specifying this new feature. The task is handed over to development for implementation. It gets implemented, passes all the tests and QA. But the requestor is unable to see the result until a very late stage – at which point he or she sees that the request has been misinterpreted… In many cases the requestor also gets frustrated because he or she does not feel that “anything is happening”.
 
@@ -23,7 +23,7 @@ NGINX is truly a swiss army knife, and since all our services uses this for term
 
 Next, we needed to find a way to dynamically update the NGINX configuration. Obviously changing the config file(s) and/or restarting was out of the question from a sysadmin/security point of view. A little Googling later we realized that the LUA support that can be enabled in NGINX fits the bill.
 
-Since LUA in NGINX supports the Redis database – this was the final piece of the puzzle. 
+Since LUA in NGINX supports the Redis database – this was the final piece of the puzzle.
 
 Effectively, the Redis database holds a mapping between “subdomain” and “upstream server port”. The “Show me your work” scripts updates the database and NGINX uses this to map incoming requests.
 
@@ -363,3 +363,6 @@ http {
 
 The reason that we put all PRs/branches behind a HTTP basic auth is not primarily security. It's important to keep searchengines out: https://searchengineland.com/how-to-keep-staging-development-site-index-286987
 
+## Starting Redis in Docker for testing
+1. Run `docker-compose up`
+2. To add enties manually you can run `docker run -it --network show-me-your-work_redis --rm redis:alpine redis-cli -h redis`
