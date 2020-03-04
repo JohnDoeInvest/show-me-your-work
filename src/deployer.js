@@ -1,6 +1,6 @@
-
-const utils = require('./utils')
-const Redis = require('ioredis')
+const utils = require('./utils/utils')
+const redis = require('./redis')
+const { BUILDING, REBUILDING, RUNNING } = require('./buildStatusState')
 const net = require('net')
 const childProcess = require('child_process')
 const fs = require('fs')
@@ -10,13 +10,6 @@ const DEPLOY_BRANCHES = (process.env.DEPLOY_BRANCHES === 'true') || false
 // eslint-disable-next-line no-unused-vars
 const BRANCH_BLACKLIST = process.env.BRANCH_BLACKLIST === undefined ? [] : process.env.BRANCH_BLACKLIST.split(',')
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
-const REDIS_HOST = process.env.REDIS_HOST || 'localhost'
-const REDIS_PORT = process.env.REDIS_PORT || 6379
-
-const redis = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT
-})
 
 function pullRequestEvent (req) {
   // TODO: When a PR is re-opened it would be nice if it was deployed again, the issues is that the
@@ -68,6 +61,7 @@ function deleteEvent (req) {
 }
 
 function deploy (deployId, repository, branch, sha) {
+  const statusId = deployId + '-STATUS'
   const url = repository.clone_url.replace('https://github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@github.com')
   return redis.get(deployId)
     .then(currentPort => {
@@ -77,6 +71,7 @@ function deploy (deployId, repository, branch, sha) {
             // Create a new deployment
             console.log('STARTING DEPLOY - ' + deployId)
             redis.set(deployId, port)
+            redis.set(statusId, BUILDING)
             childProcess.execSync(`git clone --depth=50 --branch=${branch} ${url} deploys/${deployId}`)
             childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`)
 
@@ -85,12 +80,14 @@ function deploy (deployId, repository, branch, sha) {
                 childProcess.execSync(`cd deploys/${deployId} && ${config.pres}`)
                 childProcess.execSync(`cd deploys/${deployId} && PORT=${port} ${config.envs} pm2 start ${config.startFile} --name frontend-${deployId}`)
                 console.log('FINISHED DEPLOY - ' + deployId)
+                redis.set(statusId, RUNNING)
               })
           })
       }
 
       // We already have a deployment running so we should update that
       console.log('STARTING RE-DEPLOY - ' + deployId)
+      redis.set(statusId, REBUILDING)
       childProcess.execSync(`cd deploys/${deployId} && git fetch`)
       childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`)
 
@@ -99,6 +96,7 @@ function deploy (deployId, repository, branch, sha) {
           childProcess.execSync(`cd deploys/${deployId} && ${config.pres}`)
           childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} ${config.envs} pm2 restart frontend-${deployId} --update-env`)
           console.log('FINISHED RE-DEPLOY - ' + deployId)
+          redis.set(statusId, RUNNING)
           return Promise.resolve()
         })
     })
@@ -106,7 +104,7 @@ function deploy (deployId, repository, branch, sha) {
 
 function removeDeployment (deployId) {
   console.log('REMOVED DEPLOYMENT - ' + deployId)
-  return redis.del(deployId).then(() => {
+  return redis.del(deployId, deployId + 'STATUS').then(() => {
     childProcess.exec(`pm2 delete frontend-${deployId} && rm -r deploys/${deployId}`)
   })
 }

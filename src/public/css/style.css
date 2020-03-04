@@ -1,0 +1,21 @@
+.icon {
+  height: 40px;
+  width: 40px;
+}
+
+.icon-success {
+  filter: invert(50%) sepia(30%) saturate(1000%) hue-rotate(80deg)
+}
+
+.icon-warning {
+  filter: invert(80%) sepia(10%) saturate(4000%) hue-rotate(355deg);
+}
+
+.status-item:hover {
+  background-color: #ececec;
+}
+
+a:hover {
+  color: #0056b3;
+  text-decoration: none
+}

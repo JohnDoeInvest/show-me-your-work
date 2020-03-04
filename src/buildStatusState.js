@@ -1,0 +1,5 @@
+module.exports = {
+  BUILDING: 'BUILDING',
+  REBUILDING: 'REBUILDING',
+  RUNNING: 'RUNNING'
+}

@@ -1,6 +1,7 @@
 const express = require('express')
-const utils = require('./utils')
+const utils = require('./utils/utils')
 const deployer = require('./deployer')
+const buildStatus = require('./buildStatus')
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'testing'
 const PORT = process.env.PORT || 3000
@@ -8,6 +9,8 @@ const PORT = process.env.PORT || 3000
 const app = express()
 app.disable('x-powered-by')
 app.use(express.json())
+
+app.use('/status', buildStatus)
 
 app.use((req, res, next) => {
   if (utils.verifySignature(req, JSON.stringify(req.body), WEBHOOK_SECRET)) {
