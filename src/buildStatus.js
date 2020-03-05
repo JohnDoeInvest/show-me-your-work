@@ -43,7 +43,8 @@ async function getBuildStatus () {
 // Monitor Redis event and send events to client when changes are made
 redis.monitor().then(monitor => {
   monitor.on('monitor', (time, args, source, database) => {
-    if (args[0].toLowerCase() === 'set') {
+    const command = args[0].toLowerCase()
+    if (command === 'set' || command === 'del') {
       getBuildStatus().then(statuses => {
         app.render('table', { statuses, linkHost: LINK_HOST }, (err, html) => {
           if (err) {
