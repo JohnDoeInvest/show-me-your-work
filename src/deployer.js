@@ -6,6 +6,7 @@ const childProcess = require('child_process')
 const fs = require('fs')
 const util = require('util')
 
+const statAsync = util.promisify(fs.stat)
 const execAsync = util.promisify(childProcess.exec)
 
 const DEPLOY_PULL_REQUESTS = (process.env.DEPLOY_PULL_REQUESTS === 'true') || true
@@ -37,9 +38,8 @@ function checkRunEvent (req) {
       const deployId = utils.getIdFromPullRequest(pullRequest)
 
       // Remove branch deployment when creating
-      removeDeployment(utils.getIdFromBranch(checkSuite.head_branch))
-
-      return deploy(deployId, req.body.repository, checkSuite.head_branch, checkSuite.head_sha)
+      return removeDeployment(utils.getIdFromBranch(checkSuite.head_branch))
+        .then(() => deploy(deployId, req.body.repository, checkSuite.head_branch, checkSuite.head_sha))
     } else if (DEPLOY_BRANCHES) {
       // We can't be sure that this is the correct branch, since if the SHA has been built on
       // another branch before we will get that branch name
@@ -63,53 +63,55 @@ function deleteEvent (req) {
   return removeDeployment(deployId)
 }
 
-function deploy (deployId, repository, branch, sha) {
+async function deploy (deployId, repository, branch, sha) {
   const statusId = deployId + '-STATUS'
   const url = repository.clone_url.replace('https://github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@github.com')
-  return redis.get(deployId)
-    .then(currentPort => {
-      if (currentPort === null) {
-        return getAvailablePort()
-          .then((port) => {
-            // Create a new deployment
-            console.log('STARTING DEPLOY - ' + deployId)
-            redis.set(deployId, port)
-            redis.set(statusId, BUILDING)
-            execAsync(`git clone --depth=50 --branch=${branch} ${url} deploys/${deployId}`)
-              .then(() => execAsync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`))
-              .then(() => getConfig(deployId))
-              .then(config => {
-                return execAsync(`cd deploys/${deployId} && ${config.pres}`)
-                  .then(() => execAsync(`cd deploys/${deployId} && PORT=${port} ${config.envs} pm2 start ${config.startFile} --name frontend-${deployId}`))
-                  .then(() => {
-                    console.log('FINISHED DEPLOY - ' + deployId)
-                    return redis.set(statusId, RUNNING)
-                  })
-              })
-          })
-      }
+  const deployPath = `deploys/${deployId}`
 
-      // We already have a deployment running so we should update that
-      console.log('STARTING RE-DEPLOY - ' + deployId)
-      return redis.set(statusId, REBUILDING)
-        .then(() => execAsync(`cd deploys/${deployId} && git fetch`))
-        .then(() => execAsync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`))
-        .then(() => getConfig(deployId))
-        .then(config => {
-          return execAsync(`cd deploys/${deployId} && ${config.pres}`)
-            .then(() => execAsync(`cd deploys/${deployId} && PORT=${currentPort} ${config.envs} pm2 restart frontend-${deployId} --update-env`))
-            .then(() => {
-              console.log('FINISHED RE-DEPLOY - ' + deployId)
-              return redis.set(statusId, RUNNING)
-            })
-        })
-    })
+  const currentPort = await redis.get(deployId)
+  let deployPathStat
+  try {
+    deployPathStat = await statAsync(deployPath)
+  } catch (e) {}
+
+  if (currentPort === null || deployPathStat === undefined) {
+    // If we have no port but still a deployed path we should remove the entire thing.
+    if (deployPathStat !== undefined) {
+      await removeDeployment(deployId)
+    }
+
+    const port = await getAvailablePort()
+    console.log('STARTING DEPLOY - ' + deployId)
+    await redis.set(deployId, port)
+    await redis.set(statusId, BUILDING)
+    await execAsync(`git clone --depth=50 --branch=${branch} ${url} ${deployPath}`)
+    await execAsync(`cd ${deployPath} && git checkout -qf ${sha} && npm ci`)
+
+    const config = await getConfig(deployId)
+    await execAsync(`cd ${deployPath} && ${config.pres}`)
+    await execAsync(`cd ${deployPath} && PORT=${port} ${config.envs} pm2 start ${config.startFile} --name frontend-${deployId}`)
+    console.log('FINISHED DEPLOY - ' + deployId)
+    return redis.set(statusId, RUNNING)
+  }
+
+  // We already have a deployment running so we should update that
+  console.log('STARTING RE-DEPLOY - ' + deployId)
+  await redis.set(statusId, REBUILDING)
+  await execAsync(`cd ${deployPath} && git fetch`)
+  await execAsync(`cd ${deployPath} && git checkout -qf ${sha} && npm ci`)
+
+  const config = await getConfig(deployId)
+  await execAsync(`cd ${deployPath} && ${config.pres}`)
+  await execAsync(`cd ${deployPath} && PORT=${currentPort} ${config.envs} pm2 restart frontend-${deployId} --update-env`)
+  console.log('FINISHED RE-DEPLOY - ' + deployId)
+  return redis.set(statusId, RUNNING)
 }
 
 function removeDeployment (deployId) {
   console.log('REMOVED DEPLOYMENT - ' + deployId)
   return redis.del(deployId, deployId + '-STATUS')
     .then(() => execAsync(`pm2 delete frontend-${deployId} && rm -r deploys/${deployId}`))
+    .catch(() => Promise.resolve())
 }
 
 function getConfig (deployId) {
