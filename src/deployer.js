@@ -4,6 +4,9 @@ const { BUILDING, REBUILDING, RUNNING } = require('./buildStatusState')
 const net = require('net')
 const childProcess = require('child_process')
 const fs = require('fs')
+const util = require('util')
+
+const execAsync = util.promisify(childProcess.exec)
 
 const DEPLOY_PULL_REQUESTS = (process.env.DEPLOY_PULL_REQUESTS === 'true') || true
 const DEPLOY_BRANCHES = (process.env.DEPLOY_BRANCHES === 'true') || false
@@ -72,41 +75,41 @@ function deploy (deployId, repository, branch, sha) {
             console.log('STARTING DEPLOY - ' + deployId)
             redis.set(deployId, port)
             redis.set(statusId, BUILDING)
-            childProcess.execSync(`git clone --depth=50 --branch=${branch} ${url} deploys/${deployId}`)
-            childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`)
-
-            return getConfig(deployId)
+            execAsync(`git clone --depth=50 --branch=${branch} ${url} deploys/${deployId}`)
+              .then(() => execAsync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`))
+              .then(() => getConfig(deployId))
               .then(config => {
-                childProcess.execSync(`cd deploys/${deployId} && ${config.pres}`)
-                childProcess.execSync(`cd deploys/${deployId} && PORT=${port} ${config.envs} pm2 start ${config.startFile} --name frontend-${deployId}`)
-                console.log('FINISHED DEPLOY - ' + deployId)
-                redis.set(statusId, RUNNING)
+                return execAsync(`cd deploys/${deployId} && ${config.pres}`)
+                  .then(() => execAsync(`cd deploys/${deployId} && PORT=${port} ${config.envs} pm2 start ${config.startFile} --name frontend-${deployId}`))
+                  .then(() => {
+                    console.log('FINISHED DEPLOY - ' + deployId)
+                    return redis.set(statusId, RUNNING)
+                  })
               })
           })
       }
 
       // We already have a deployment running so we should update that
       console.log('STARTING RE-DEPLOY - ' + deployId)
-      redis.set(statusId, REBUILDING)
-      childProcess.execSync(`cd deploys/${deployId} && git fetch`)
-      childProcess.execSync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`)
-
-      return getConfig(deployId)
+      return redis.set(statusId, REBUILDING)
+        .then(() => execAsync(`cd deploys/${deployId} && git fetch`))
+        .then(() => execAsync(`cd deploys/${deployId} && git checkout -qf ${sha} && npm ci`))
+        .then(() => getConfig(deployId))
         .then(config => {
-          childProcess.execSync(`cd deploys/${deployId} && ${config.pres}`)
-          childProcess.execSync(`cd deploys/${deployId} && PORT=${currentPort} ${config.envs} pm2 restart frontend-${deployId} --update-env`)
-          console.log('FINISHED RE-DEPLOY - ' + deployId)
-          redis.set(statusId, RUNNING)
-          return Promise.resolve()
+          return execAsync(`cd deploys/${deployId} && ${config.pres}`)
+            .then(() => execAsync(`cd deploys/${deployId} && PORT=${currentPort} ${config.envs} pm2 restart frontend-${deployId} --update-env`))
+            .then(() => {
+              console.log('FINISHED RE-DEPLOY - ' + deployId)
+              return redis.set(statusId, RUNNING)
+            })
         })
     })
 }
 
 function removeDeployment (deployId) {
   console.log('REMOVED DEPLOYMENT - ' + deployId)
-  return redis.del(deployId, deployId + '-STATUS').then(() => {
-    childProcess.exec(`pm2 delete frontend-${deployId} && rm -r deploys/${deployId}`)
-  })
+  return redis.del(deployId, deployId + '-STATUS')
+    .then(() => execAsync(`pm2 delete frontend-${deployId} && rm -r deploys/${deployId}`))
 }
 
 function getConfig (deployId) {
