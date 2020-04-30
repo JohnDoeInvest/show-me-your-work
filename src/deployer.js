@@ -137,6 +137,7 @@ async function deploy (deployId, cloneUrl, branch, sha) {
       console.log(`DEPLOY - ${deployId}: Starting application`)
       await execAsync(deployId, `cd ${deployPath} && pm2 start ${config.startFile} --name ${name}`, {
         env: {
+          ...process.env,
           ...config.env,
           PORT: port
         }
@@ -160,6 +161,7 @@ async function deploy (deployId, cloneUrl, branch, sha) {
     console.log(`RE-DEPLOY - ${deployId}: Starting application`)
     await execAsync(deployId, `cd ${deployPath} && pm2 restart ${name} --update-env`, {
       env: {
+        ...process.env,
         ...config.env,
         PORT: currentPort
       }
