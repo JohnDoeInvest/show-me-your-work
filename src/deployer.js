@@ -125,7 +125,6 @@ async function deploy (deployId, cloneUrl, branch, sha) {
 
       const port = await utils.getAvailablePort()
       console.log(`DEPLOY - ${deployId}: Starting`)
-      await redis.set(deployId, port)
       await updateStatus(deployId, BUILDING, cloneUrl, branch, sha)
       await execAsync(deployId, `git clone --depth=50 --branch=${branch} ${url} ${deployPath}`)
       console.log(`DEPLOY - ${deployId}: Installing dependencies`)
@@ -139,9 +138,10 @@ async function deploy (deployId, cloneUrl, branch, sha) {
       await execAsync(deployId, `cd ${deployPath} && pm2 start ${config.startFile} --name ${name}`, {
         env: {
           ...config.env,
-          PORT: currentPort
+          PORT: port
         }
       })
+      await redis.set(deployId, port)
       console.log(`DEPLOY - ${deployId}: Finished`)
       return updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
     }
