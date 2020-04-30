@@ -14,7 +14,7 @@ const sse = new SSE()
 app.set('views', './src/views')
 app.set('view engine', 'pug')
 
-app.use('/events/', sse.init)
+app.get('/events/', sse.init)
 app.get('/', async (req, res) => {
   const statuses = await getBuildStatus()
   res.render('index', { statuses, linkHost: LINK_HOST })
@@ -28,14 +28,14 @@ async function getBuildStatus () {
     return []
   }
 
-  const statuses = await redis.mget(keys)
+  const statuses = await Promise.all(keys.map(key => redis.hgetall(key)))
 
   return keys.map((key, index) => {
     const id = key.replace('-STATUS', '')
     return {
       id: id,
       type: id.startsWith('pr-') ? 'pull-request' : 'branch',
-      status: statuses[index]
+      status: statuses[index].status
     }
   })
 }

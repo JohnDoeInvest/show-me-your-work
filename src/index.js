@@ -44,4 +44,9 @@ function handleEvent (eventType, req) {
   }
 }
 
-app.listen(PORT, () => console.log(`Listening to port ${PORT}`))
+deployer.checkStatus().then(() => {
+  app.listen(PORT, () => console.log(`Listening to port ${PORT}`))
+}).catch((e) => {
+  console.error(e)
+  process.exit(1)
+})

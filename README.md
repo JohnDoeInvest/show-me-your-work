@@ -366,3 +366,20 @@ The reason that we put all PRs/branches behind a HTTP basic auth is not primaril
 ## Starting Redis in Docker for testing
 1. Run `docker-compose up`
 2. To add enties manually you can run `docker run -it --network show-me-your-work_redis --rm redis:alpine redis-cli -h redis`
+
+## Config file example
+```json
+{
+    "startFile": "./src/server/index.js", // The file for PM2 to run
+    "pre": [ // Commands to run before starting/restarting the service
+        "npm run build:stage"
+    ],
+    "env": {
+        "NODE_ENV": "stage",
+        "REDIS_HOST": "10.20.7.105",
+        "REDIS_PORT": "6379"
+    }
+}
+
+```
+

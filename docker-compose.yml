@@ -2,7 +2,6 @@ version: '3.3'
 services:
   redis:
     image: "redis:alpine"
-    restart: always
     hostname: redis
     networks:
       - redis
