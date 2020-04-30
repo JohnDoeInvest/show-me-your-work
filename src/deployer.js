@@ -169,7 +169,7 @@ async function deploy (deployId, cloneUrl, branch, sha) {
     console.log(`RE-DEPLOY - ${deployId}: Finished`)
     return updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
   } catch (e) {
-    console.log(`${deployId}: Aborted`)
+    console.log(`${deployId}: Aborted`, e)
     return Promise.resolve()
   }
 }
