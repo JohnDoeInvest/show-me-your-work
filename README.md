@@ -58,38 +58,43 @@ Effectively the process is already well documented here: https://github.com/open
 
 In the instructions below we also include Nchan (https://nchan.io/) and GeoIP2 from MaxMind (https://www.maxmind.com/)
 ```
-wget http://nginx.org/download/nginx-1.15.5.tar.gz
-tar xzf nginx-1.15.5.tar.gz
+https://nginx.org/download/nginx-1.18.0.tar.gz
+tar xzf nginx-1.18.0.tar.gz
 
 git clone https://github.com/slact/nchan.git
+https://github.com/slact/nchan/commit/82b766cd133c060542c2420b19c13d74de6cc0c6
 
-wget -O luajit2.tar.gz https://github.com/openresty/luajit2/archive/v2.1-20190626.tar.gz
+wget -O luajit2.tar.gz https://github.com/openresty/luajit2/archive/v2.1-20200102.tar.gz
 tar xzf luajit2.tar.gz
-cd luajit2-2.1-20190626/
+cd luajit2-2.1-20200102/
 make && sudo make install
 export LUAJIT_LIB=/usr/local/lib/
 export LUAJIT_INC=/usr/local/include/luajit-2.1
+cd ..
 
-wget -O ngx_devel_kit.tar.gz https://github.com/simplresty/ngx_devel_kit/archive/v0.3.1rc1.tar.gz
+wget -O ngx_devel_kit.tar.gz https://github.com/vision5/ngx_devel_kit/archive/v0.3.1.tar.gz
 tar xzf ngx_devel_kit.tar.gz
 
-wget -O lua-nginx-module.tar.gz https://github.com/openresty/lua-nginx-module/archive/v0.10.15.tar.gz
+wget -O lua-nginx-module.tar.gz https://github.com/openresty/lua-nginx-module/archive/v0.10.16rc5.tar.gz
 tar xzf lua-nginx-module.tar.gz
 
-wget -O libmaxminddb.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/1.3.2/libmaxminddb-1.3.2.tar.gz
+wget -O libmaxminddb.tar.gz https://github.com/maxmind/libmaxminddb/releases/download/1.4.2/libmaxminddb-1.4.2.tar.gz
 tar xzf libmaxminddb.tar.gz
-cd libmaxminddb-1.3.2/
+cd libmaxminddb-1.4.2/
 ./configure
 make
 make check
 sudo make install
 sudo ldconfig
+cd ..
 
-wget -O ngx_http_geoip2.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/3.2.tar.gz
+wget -O ngx_http_geoip2.tar.gz https://github.com/leev/ngx_http_geoip2_module/archive/3.3.tar.gz
 tar xzf ngx_http_geoip2.tar.gz
 
-cd nginx-1.15.5
+wget -O echo-nginx-module.tar.gz https://github.com/openresty/echo-nginx-module/archive/v0.62rc1.tar.gz
+tar xzf echo-nginx-module.tar.gz
 
+cd nginx-1.18.0
 ./configure --prefix=/etc/nginx \
             --with-ld-opt="-Wl,-rpath,$LUAJIT_LIB" \
             --sbin-path=/usr/sbin/nginx \
@@ -101,7 +106,7 @@ cd nginx-1.15.5
             --user=nginx \
             --group=nginx \
             --build=CentOS \
-            --builddir=nginx-1.15.5 \
+            --builddir=nginx-1.18.0 \
             --with-select_module \
             --with-poll_module \
             --with-threads \
@@ -139,10 +144,11 @@ cd nginx-1.15.5
             --with-pcre-jit \
             --with-debug \
             --add-module=../nchan \
-            --add-module=../ngx_devel_kit-0.3.1rc1 \
-            --add-module=../lua-nginx-module-0.10.15 \
-            --add-module=../ngx_http_geoip2_module-3.2
-
+            --add-module=../ngx_devel_kit-0.3.1 \
+            --add-module=../lua-nginx-module-0.10.16rc5 \
+            --add-module=../ngx_http_geoip2_module-3.3 \
+            --add-module=../echo-nginx-module-0.62rc1 
+            
 make
 sudo make install
 
@@ -150,10 +156,25 @@ useradd --system --home /var/cache/nginx --shell /sbin/nologin --comment "nginx 
 mkdir -p /var/cache/nginx
 ```
 
+Possible issues with the above:
+  * Nchan does some compares that recent GCC dislikes. Until this is fixed, remove -Wall from nginx-1.18.0/Makefile
+  * Nchan has a bug that we have run into and had to manually fix before build. See https://github.com/slact/nchan/issues/534 and the specific line to be commented out https://github.com/slact/nchan/commit/82b766cd133c060542c2420b19c13d74de6cc0c6
+  
 Here comes a twist: to get the LUA scripts, we need to install the Openresty release as well:
 ```
 yum-config-manager --add-repo https://openresty.org/package/centos/openresty.repo
 yum install openresty
+```
+
+Possible issues with the above:
+  * Openresty offical builds does not quite match the Nginx ones. So if nginx does not start, showing `failed to load the 'resty.core' module` in the error log, you'll need to build from source:
+```
+wget https://openresty.org/download/openresty-1.17.8.1rc1.tar.gz
+tar xzf openresty-1.17.8.1rc1.tar.gz
+cd openresty-1.17.8.1rc1
+./configure
+make
+sudo make install
 ```
 
 Now, we install Redis. And since we run another instance already on the example server, we change the port from 6379 to 6380
