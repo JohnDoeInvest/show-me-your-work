@@ -1,5 +1,4 @@
 const crypto = require('crypto')
-const net = require('net')
 
 function verifySignature (req, payloadBody, secret) {
   const receivedSignature = req.header('X-HUB-SIGNATURE')
@@ -14,37 +13,23 @@ function verifySignature (req, payloadBody, secret) {
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(receivedSignature))
 }
 
-function getIdFromPullRequest (pullRequest) {
-  return 'pr-' + pullRequest.number
+function getIdPrefix (config) {
+  return config.name.replace(' ', '-').toLowerCase()
 }
 
-function getIdFromBranch (ref) {
-  return 'branch-' + ref.replace('refs/heads/')
+function getIdFromPullRequest (config, pullRequest) {
+  return `${getIdPrefix(config)}-pr-${pullRequest.number}`
 }
 
-function getIdFromTag (ref) {
-  return 'tag-' + ref.replace('refs/tags/')
+function getIdFromBranch (config, ref) {
+  return `${getIdPrefix(config)}-branch-${ref.replace('refs/heads/')}`
 }
 
-/**
- * Starts a server with the port 0 which makes the OS automatically assign a port to the server.
- * This means that the port was ("is") free on the OS. We get the port from the server and close
- * is again. We now have a port which is not used by anything on the system.
- */
-function getAvailablePort () {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.on('error', reject)
-    server.on('listening', () => {
-      const port = server.address().port
-      server.close(() => resolve(port))
-    })
-    server.listen(0)
-  })
+function getIdFromTag (config, ref) {
+  return `${getIdPrefix(config)}-tag-${ref.replace('refs/tags/')}`
 }
 
 module.exports = {
-  getAvailablePort,
   verifySignature,
   getIdFromPullRequest,
   getIdFromBranch,

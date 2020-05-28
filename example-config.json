@@ -1,0 +1,46 @@
+[
+  {
+    "name": "Stage Frontend",
+    "port": "4000:4999",
+    "host": "agentvegan.com",
+    "deployPullRequest": true,
+    "deployBranches": true,
+    "branchBlackList": ["master"],
+    "staticBranches": ["develop"],
+    "repository": "agentvegan/agentvegan-frontend",
+    "pre": [
+      "npm ci",
+      "npm run build:stage"
+    ],
+    "startFile": "./src/server/index.js",
+    "env": {
+      "NODE_ENV": "stage",
+      "REDIS_HOST": "10.20.7.105",
+      "REDIS_PORT": "6379"
+    },
+    "dependencies": {
+      "Stage Server": {
+        "defaultBranch": "develop"
+      }
+    }
+  },
+  {
+    "name": "Stage Server",
+    "port": "5000:5999",
+    "host": "agentvegan.com",
+    "deployPullRequest": true,
+    "deployBranches": true,
+    "branchBlackList": ["master"],
+    "staticBranches": ["develop"],
+    "repository": "agentvegan/agentvegan-server",
+    "pre": [
+      "npm ci"
+    ],
+    "startFile": "threadStart.js -- ./src/server.js",
+    "env": {
+      "ENV": "stage",
+      "REDIS_HOST": "10.20.7.105",
+      "REDIS_PORT": "6379"
+    }
+  }
+]

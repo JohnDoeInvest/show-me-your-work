@@ -40,14 +40,14 @@ Assuming you have the above requirements installed you need to setup the Nginx c
 | PORT | The port to listen at | 3000 |
 | WEBHOOK_SECRET | The GitHub webhook secret | |
 | GITHUB_ACCESS_TOKEN | An access token to GitHub, required to fetch from private repositories | |
-| DEPLOY_PULL_REQUESTS | Should the application deploy pull requests | true |
-| DEPLOY_BRANCHES | Should the application deploy branches | false |
-| BRANCH_BLACKLIST | Which branches should we not deploy, comma seperated names | |
 | REDIS_HOST | What host Redis is running on | localhost |
 | REDIS_PORT | What port Redis is running on  | 6379 |
 
+## Config file
+Checkout `example-config.json`
+
 ## Subdomain structure
-The subdomians have prefixes so as to not clash. Branches have the subdomain structure of `branch-BRANCH_NAME` and pull requests have the structure of `pr-PR_NUMBER`. So if we run the server on `example.com` the pull request with number 1 would be reached at `pr-1.example.com`
+The subdomians have prefixes so as to not clash. Branches have the subdomain structure of `CONFIG_NAME-branch-BRANCH_NAME` and pull requests have the structure of `CONFIG_NAME-pr-PR_NUMBER`. So if we run the server on `example.com` and have a config name of `Test Server` the pull request with number 1 would be reached at `test-server-pr-1.example.com`
 
 ## Custom Nginx build
 NOTE: Below we compile NGINX and the Openresty module (https://openresty.org/en/) from source because we use a couple of custom components. This is overly complicated – we know. We hope that people that are used to working with Openresty will jump in and create another installation section based on the official releases. In theory it should only be to install Openresty, Redis and then jump to configuration...
@@ -147,8 +147,8 @@ cd nginx-1.18.0
             --add-module=../ngx_devel_kit-0.3.1 \
             --add-module=../lua-nginx-module-0.10.16rc5 \
             --add-module=../ngx_http_geoip2_module-3.3 \
-            --add-module=../echo-nginx-module-0.62rc1 
-            
+            --add-module=../echo-nginx-module-0.62rc1
+
 make
 sudo make install
 
@@ -159,7 +159,7 @@ mkdir -p /var/cache/nginx
 Possible issues with the above:
   * Nchan does some compares that recent GCC dislikes. Until this is fixed, remove -Wall from nginx-1.18.0/Makefile
   * Nchan has a bug that we have run into and had to manually fix before build. See https://github.com/slact/nchan/issues/534 and the specific line to be commented out https://github.com/slact/nchan/commit/82b766cd133c060542c2420b19c13d74de6cc0c6
-  
+
 Here comes a twist: to get the LUA scripts, we need to install the Openresty release as well:
 ```
 yum-config-manager --add-repo https://openresty.org/package/centos/openresty.repo
@@ -387,20 +387,4 @@ The reason that we put all PRs/branches behind a HTTP basic auth is not primaril
 ## Starting Redis in Docker for testing
 1. Run `docker-compose up`
 2. To add enties manually you can run `docker run -it --network show-me-your-work_redis --rm redis:alpine redis-cli -h redis`
-
-## Config file example
-```json
-{
-    "startFile": "./src/server/index.js", // The file for PM2 to run
-    "pre": [ // Commands to run before starting/restarting the service
-        "npm run build:stage"
-    ],
-    "env": {
-        "NODE_ENV": "stage",
-        "REDIS_HOST": "10.20.7.105",
-        "REDIS_PORT": "6379"
-    }
-}
-
-```
 

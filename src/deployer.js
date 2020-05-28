@@ -4,36 +4,44 @@ const redis = require('./redis')
 const { BUILDING, REBUILDING, RUNNING } = require('./buildStatusState')
 const childProcess = require('child_process')
 const fs = require('fs')
+const getPort = require('get-port')
 const util = require('util')
+const configs = require('../config.json')
 
 const statAsync = util.promisify(fs.stat)
-
-const DEPLOY_PULL_REQUESTS = (process.env.DEPLOY_PULL_REQUESTS === 'true') || true
-const DEPLOY_BRANCHES = (process.env.DEPLOY_BRANCHES === 'true') || false
-// eslint-disable-next-line no-unused-vars
-const BRANCH_BLACKLIST = process.env.BRANCH_BLACKLIST === undefined ? [] : process.env.BRANCH_BLACKLIST.split(',')
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
-const PM2_NAME_PREFIX = process.env.PM2_NAME_PREFIX || 'default'
 
-// This contains signal
+/** This contains the following
+ *  {
+ *    currentSignal: Signal,
+ *    status: 'ABORTED' | 'RUNNING'
+ *  }
+ */
 const runningTasks = {}
 
 function execAsync (deployId, command, options) {
   return new Promise(function (resolve, reject) {
-    const child = childProcess.exec(command, options, (error, stdout, stderr) => {
-      if (runningTasks[deployId] === 'ABORTED') {
-        reject(error)
-        return
-      }
-      delete runningTasks[deployId]
-      if (error) {
-        reject(error)
-        return
-      }
+    if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
+      const child = childProcess.exec(command, options, (error, stdout, stderr) => {
+        if (runningTasks[deployId].status === 'ABORTED') {
+          reject(error)
+          return
+        }
 
-      resolve()
-    })
-    runningTasks[deployId] = child
+        if (error) {
+          reject(error)
+          return
+        }
+
+        resolve()
+      })
+      runningTasks[deployId].currentSignal = child
+    } else {
+      if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'ABORTED') {
+        reject(new Error('Aborted for unknown reason'))
+      }
+      console.warn('Trying to start child process without a running task')
+    }
   })
 }
 
@@ -52,64 +60,116 @@ async function checkStatus () {
   }
 }
 
-function pullRequestEvent (req) {
+function getConfigForPayload (eventType, payload) {
+  const matchingConfigs = []
+  const branch = getBranchFromPayload(eventType, payload)
+  for (const config of configs) {
+    if (payload.repository.full_name === config.repository) {
+      if (config.branch !== undefined && config.branch !== branch) {
+        continue
+      }
+
+      if (config.branchBlackList !== undefined && config.branchBlackList.includes(branch)) {
+        continue
+      }
+
+      matchingConfigs.push(config)
+    }
+  }
+
+  if (matchingConfigs.length === 0) {
+    throw new Error('No matching configs for: ' + JSON.stringify({
+      eventType,
+      branch,
+      repository: payload.repository.full_name
+    }))
+  }
+
+  if (matchingConfigs.length > 1) {
+    console.warn('Multiple matching configs for: ' + JSON.stringify({
+      eventType,
+      branch,
+      repository: payload.repository.full_name
+    }) + ' selecting first found')
+  }
+
+  return matchingConfigs[0]
+}
+
+function getBranchFromPayload (eventType, payload) {
+  switch (eventType) {
+    case 'pull_request':
+      return payload.pull_request.head.ref
+    case 'check_run':
+      return payload.check_run.check_suite.head_branch
+    case 'delete':
+      return payload.ref.replace('refs/heads/') // This will always return as "refs/heads/BRANCH"
+  }
+}
+
+function pullRequestEvent (eventType, payload) {
   // TODO: When a PR is re-opened it would be nice if it was deployed again, the issues is that the
   // Check Suite doesn't run again. So we would have to do it on the re-open but also check that
   // all checks have been ran somehow.
-  const deployId = utils.getIdFromPullRequest(req.body)
-  if (req.body.action === 'closed') {
+  const config = getConfigForPayload(eventType, payload)
+  const deployId = utils.getIdFromPullRequest(config, payload)
+  if (payload.action === 'closed') {
     return removeDeployment(deployId)
   } else {
     return Promise.resolve()
   }
 }
-function checkRunEvent (req) {
-  if (req.body.action !== 'completed' || req.body.check_run.check_suite.head_branch === null) {
+
+async function checkRunEvent (eventType, payload) {
+  if (payload.action !== 'completed' || payload.check_run.check_suite.head_branch === null) {
     return Promise.resolve()
   }
 
-  const checkSuite = req.body.check_run.check_suite
+  const config = getConfigForPayload(eventType, payload)
+  const checkSuite = payload.check_run.check_suite
   if (checkSuite.status === 'completed' && checkSuite.conclusion === 'success') {
-    if (DEPLOY_PULL_REQUESTS && checkSuite.pull_requests.length > 0) {
+    if (config.deployPullRequest === true && checkSuite.pull_requests.length > 0) {
       const pullRequest = checkSuite.pull_requests[0]
-      const deployId = utils.getIdFromPullRequest(pullRequest)
+      const deployId = utils.getIdFromPullRequest(config, pullRequest)
 
       // Remove branch deployment when creating
-      return removeDeployment(utils.getIdFromBranch(checkSuite.head_branch))
-        .then(() => deploy(deployId, req.body.repository.clone_url, checkSuite.head_branch, checkSuite.head_sha))
-    } else if (DEPLOY_BRANCHES) {
-      // We can't be sure that this is the correct branch, since if the SHA has been built on
-      // another branch before we will get that branch name
-      const deployId = utils.getIdFromBranch(checkSuite.head_branch)
-      if (BRANCH_BLACKLIST.includes(checkSuite.head_branch)) {
-        return Promise.resolve()
+      if (!config.staticBranches.includes(checkSuite.head_branch)) {
+        await removeDeployment(utils.getIdFromBranch(config, checkSuite.head_branch))
       }
 
-      return deploy(deployId, req.body.repository.clone_url, checkSuite.head_branch, checkSuite.head_sha)
+      return deploy(config, deployId, payload.repository.clone_url, checkSuite.head_branch, checkSuite.head_sha)
+    } else if (config.deployBranches === true) {
+      // We can't be sure that this is the correct branch, since if the SHA has been built on
+      // another branch before we will get that branch name
+      const deployId = utils.getIdFromBranch(config, checkSuite.head_branch)
+      return deploy(config, deployId, payload.repository.clone_url, checkSuite.head_branch, checkSuite.head_sha)
     }
   }
 
   return Promise.resolve()
 }
 
-function deleteEvent (req) {
-  const deployId = (req.body.ref_type === 'tag')
-    ? utils.getIdFromTag(req.body.ref)
-    : utils.getIdFromBranch(req.body.ref)
-
+function deleteEvent (eventType, payload) {
+  if (payload.ref_type === 'tag') {
+    return Promise.resolve()
+  }
+  const config = getConfigForPayload(eventType, payload)
+  const deployId = utils.getIdFromBranch(config, payload.ref)
   return removeDeployment(deployId)
 }
 
-async function deploy (deployId, cloneUrl, branch, sha) {
-  if (runningTasks[deployId] !== undefined) {
-    const task = runningTasks[deployId]
-    runningTasks[deployId] = 'ABORTED'
-    task.kill()
+async function deploy (config, deployId, cloneUrl, branch, sha) {
+  if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
+    const signal = runningTasks[deployId].currentSignal
+    runningTasks[deployId].status = 'ABORTED'
+    signal.kill()
   }
 
+  runningTasks[deployId] = { status: 'RUNNING' }
   try {
     const url = cloneUrl.replace('https://github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@github.com')
     const deployPath = `deploys/${deployId}`
+    const name = deployId
 
     const currentPort = await redis.get(deployId)
     let deployPathStat
@@ -123,25 +183,34 @@ async function deploy (deployId, cloneUrl, branch, sha) {
         await removeDeployment(deployId)
       }
 
-      const port = await utils.getAvailablePort()
+      const allowedPorts = config.port.includes(':') ? getPort.makeRange(...config.port.split(':')) : config.port
+      const port = await getPort({ port: allowedPorts })
+
+      if (Array.isArray(allowedPorts) && (port < allowedPorts[0] || port > allowedPorts[allowedPorts.length - 1])) {
+        throw new Error('Could not find available port for config: ' + JSON.stringify(config))
+      } else if (!Array.isArray(allowedPorts) && port !== allowedPorts) {
+        throw new Error('Could not find available port for config: ' + JSON.stringify(config))
+      }
+
       console.log(`DEPLOY - ${deployId}: Starting`)
       await updateStatus(deployId, BUILDING, cloneUrl, branch, sha)
       await execAsync(deployId, `git clone --depth=50 --branch=${branch} ${url} ${deployPath}`)
       console.log(`DEPLOY - ${deployId}: Installing dependencies`)
-      await execAsync(deployId, `cd ${deployPath} && git checkout -qf ${sha} && npm ci`)
+      await execAsync(deployId, `cd ${deployPath} && git checkout -qf ${sha}`)
       console.log(`DEPLOY - ${deployId}: Running pre-start commands`)
 
-      const config = await getConfig(deployId)
-      const name = getPm2Name(deployId)
-      await execAsync(deployId, `cd ${deployPath} && ${config.pres}`)
+      for (const pre of config.pre) {
+        await execAsync(deployId, `cd ${deployPath} && ${pre}`)
+      }
       console.log(`DEPLOY - ${deployId}: Starting application`)
-      await execAsync(deployId, `cd ${deployPath} && pm2 start ${config.startFile} --name ${name}`, {
+      await execAsync(deployId, `cd ${deployPath} && pm2 start --name ${name} ${config.startFile}`, {
         env: {
           ...process.env,
           ...config.env,
           PORT: port
         }
       })
+
       await redis.set(deployId, port)
       console.log(`DEPLOY - ${deployId}: Finished`)
       return updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
@@ -152,11 +221,12 @@ async function deploy (deployId, cloneUrl, branch, sha) {
     await updateStatus(deployId, REBUILDING, cloneUrl, branch, sha)
     await execAsync(deployId, `cd ${deployPath} && git fetch`)
     console.log(`RE-DEPLOY - ${deployId}: Installing dependencies`)
-    await execAsync(deployId, `cd ${deployPath} && git checkout -qf ${sha} && npm ci`)
+    await execAsync(deployId, `cd ${deployPath} && git checkout -qf ${sha}`)
     console.log(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
-    const config = await getConfig(deployId)
-    const name = getPm2Name(deployId)
-    await execAsync(deployId, `cd ${deployPath} && ${config.pres}`)
+
+    for (const pre of config.pre) {
+      await execAsync(deployId, `cd ${deployPath} && ${pre}`)
+    }
 
     console.log(`RE-DEPLOY - ${deployId}: Starting application`)
     await execAsync(deployId, `cd ${deployPath} && pm2 restart ${name} --update-env`, {
@@ -167,39 +237,31 @@ async function deploy (deployId, cloneUrl, branch, sha) {
       }
     })
     console.log(`RE-DEPLOY - ${deployId}: Finished`)
-    return updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
+    await updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
+    delete runningTasks[deployId]
+    return Promise.resolve()
   } catch (e) {
     console.log(`${deployId}: Aborted`, e)
+    delete runningTasks[deployId]
     return Promise.resolve()
   }
 }
 
-function getConfig (deployId) {
-  const hasConfig = fs.existsSync(`deploys/${deployId}/show-me-your-work.json`)
-  if (!hasConfig) {
-    return removeDeployment(deployId)
-  }
-
-  const config = JSON.parse(fs.readFileSync(`deploys/${deployId}/show-me-your-work.json`, 'utf-8'))
-  config.pres = config.pre.join(' && ')
-
-  return Promise.resolve(config)
-}
-
 function removeDeployment (deployId) {
   const isWin = process.platform === 'win32'
-  if (runningTasks[deployId] !== undefined) {
-    const task = runningTasks[deployId]
-    runningTasks[deployId] = 'ABORTED'
+  if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
+    const signal = runningTasks[deployId].currentSignal
+    runningTasks[deployId].status = 'ABORTED'
 
+    runningTasks[deployId] = { status: 'RUNNING' }
     if (isWin) { // process.platform was undefined for me, but this works
-      childProcess.execSync(`taskkill /F /T /PID ${task.pid}`) // windows specific
+      childProcess.execSync(`taskkill /F /T /PID ${signal.pid}`) // windows specific
     } else {
-      task.kill('SIGINT')
+      signal.kill('SIGINT')
     }
 
     return new Promise((resolve, reject) => {
-      task.on('exit', () => {
+      signal.on('exit', () => {
         executeRemoveDeployment(deployId)
           .then(resolve)
           .catch(reject)
@@ -212,26 +274,23 @@ function removeDeployment (deployId) {
 
 function executeRemoveDeployment (deployId) {
   const statusId = deployId + '-STATUS'
-  delete runningTasks[deployId]
   console.log(deployId + ': Removing deployment')
   const isWin = process.platform === 'win32'
-  const name = getPm2Name(deployId)
 
+  runningTasks[deployId] = { status: 'RUNNING' }
   return redis.del(deployId, statusId)
     .then(() => {
-      return execAsync(deployId, `pm2 delete ${name}`)
+      return execAsync(deployId, `pm2 delete ${deployId}`)
         .catch(() => Promise.resolve())
     })
     .then(() => execAsync(deployId, isWin ? `rmdir deploys\\${deployId} /s /q` : `rm -r deploys/${deployId}`))
     .then(() => console.log(deployId + ': Removed deployment'))
+    .then(() => delete runningTasks[deployId])
     .catch(e => {
       console.log(e.message)
+      delete runningTasks[deployId]
       Promise.resolve()
     })
-}
-
-function getPm2Name (deployId) {
-  return PM2_NAME_PREFIX + '-' + deployId
 }
 
 async function updateStatus (deployId, status, cloneUrl, branch, sha) {

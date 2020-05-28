@@ -24,20 +24,20 @@ app.post('/', (req, res) => {
   const eventType = req.header('X-GitHub-Event')
   res.sendStatus(200)
 
-  return handleEvent(eventType, req)
+  return handleEvent(eventType, req.body)
     .catch(err => {
       console.error(err)
     })
 })
 
-function handleEvent (eventType, req) {
+function handleEvent (eventType, payload) {
   switch (eventType) {
     case 'pull_request':
-      return deployer.pullRequestEvent(req)
+      return deployer.pullRequestEvent(eventType, payload)
     case 'check_run':
-      return deployer.checkRunEvent(req)
+      return deployer.checkRunEvent(eventType, payload)
     case 'delete':
-      return deployer.deleteEvent(req)
+      return deployer.deleteEvent(eventType, payload)
     default:
       // Just ignore the event
       return Promise.resolve()
