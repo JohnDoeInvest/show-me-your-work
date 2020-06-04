@@ -15,7 +15,7 @@
     "startFile": "./src/server/index.js",
     "env": {
       "NODE_ENV": "stage",
-      "REDIS_HOST": "10.20.7.105",
+      "REDIS_HOST": "127.0.0.1",
       "REDIS_PORT": "6379"
     },
     "dependencies": {
@@ -39,7 +39,7 @@
     "startFile": "threadStart.js -- ./src/server.js",
     "env": {
       "ENV": "stage",
-      "REDIS_HOST": "10.20.7.105",
+      "REDIS_HOST": "127.0.0.1",
       "REDIS_PORT": "6379"
     }
   }

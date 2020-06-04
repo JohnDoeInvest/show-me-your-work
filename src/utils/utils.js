@@ -29,9 +29,18 @@ function getIdFromTag (config, ref) {
   return `${getIdPrefix(config)}-tag-${ref.replace('refs/tags/')}`
 }
 
+function prepareEnvs (config, port) {
+  const envs = {}
+  for (const [key, env] of Object.entries(config.env)) {
+    envs[key] = env.replace('{{PORT}}', port)
+  }
+  return envs
+}
+
 module.exports = {
   verifySignature,
   getIdFromPullRequest,
   getIdFromBranch,
-  getIdFromTag
+  getIdFromTag,
+  prepareEnvs
 }
