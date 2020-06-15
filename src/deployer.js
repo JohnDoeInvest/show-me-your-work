@@ -183,7 +183,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         await removeDeployment(deployId)
       }
 
-      const allowedPorts = config.port.includes(':') ? getPort.makeRange(...config.port.split(':')) : config.port
+      const allowedPorts = config.port.includes(':') ? getPort.makeRange(...config.port.split(':').map(s => Number.parseInt(s))) : Number.parseInt(config.port)
       const port = await getPort({ port: allowedPorts })
 
       if (Array.isArray(allowedPorts) && (port < allowedPorts[0] || port > allowedPorts[allowedPorts.length - 1])) {
