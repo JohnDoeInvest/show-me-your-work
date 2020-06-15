@@ -225,7 +225,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       }
 
       console.log(`DEPLOY - ${deployId}: Writing .env file`)
-      await writeDotEnvFile({
+      await writeDotEnvFile(deployPath, {
         ...utils.prepareEnvs(config, port),
         PORT: port
       })
@@ -257,7 +257,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     }
 
     console.log(`RE-DEPLOY - ${deployId}: Writing .env file`)
-    await writeDotEnvFile({
+    await writeDotEnvFile(deployPath, {
       ...utils.prepareEnvs(config, currentPort),
       PORT: currentPort
     })
