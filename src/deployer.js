@@ -289,10 +289,10 @@ function execPM2 (fun, options) {
   })
 }
 
-function writeDotEnvFile (envs) {
+function writeDotEnvFile (deployPath, envs) {
   return new Promise((resolve, reject) => {
     const data = Object.entries(envs).map(([key, val]) => `${key}=${val}`).join('\n')
-    fs.writeFile(path.join(path, '.env'), data, (err) => {
+    fs.writeFile(path.join(deployPath, '.env'), data, (err) => {
       if (err) {
         reject(err)
         return
