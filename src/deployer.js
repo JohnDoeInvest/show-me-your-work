@@ -215,7 +215,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       await execAsync(deployId, `cd ${deployPath} && pm2 start --name ${name} ${config.startFile}`, {
         env: {
           ...process.env,
-          ...utils.prepareEnvs(config.env, port),
+          ...utils.prepareEnvs(config, port),
           PORT: port
         }
       })
@@ -241,7 +241,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     await execAsync(deployId, `cd ${deployPath} && pm2 restart ${name} --update-env`, {
       env: {
         ...process.env,
-        ...utils.prepareEnvs(config.env, currentPort),
+        ...utils.prepareEnvs(config, currentPort),
         PORT: currentPort
       }
     })
