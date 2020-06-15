@@ -1,6 +1,8 @@
 require('dotenv').config()
 
 const express = require('express')
+const pm2 = require('pm2')
+
 const utils = require('./utils/utils')
 const deployer = require('./deployer')
 const buildStatus = require('./buildStatus')
@@ -46,9 +48,16 @@ function handleEvent (eventType, payload) {
   }
 }
 
-deployer.checkStatus().then(() => {
-  app.listen(PORT, () => console.log(`Listening to port ${PORT}`))
-}).catch((e) => {
-  console.error(e)
-  process.exit(1)
+pm2.connect(err => {
+  if (err) {
+    console.error(err)
+    process.exit(2)
+  }
+
+  deployer.checkStatus().then(() => {
+    app.listen(PORT, () => console.log(`Listening to port ${PORT}`))
+  }).catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
 })

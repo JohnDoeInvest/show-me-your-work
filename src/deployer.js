@@ -7,6 +7,9 @@ const fs = require('fs')
 const getPort = require('get-port')
 const util = require('util')
 const configs = require('../config.json')
+const path = require('path')
+
+const pm2 = require('pm2')
 
 const statAsync = util.promisify(fs.stat)
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
@@ -220,13 +223,20 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       for (const pre of config.pre) {
         await execAsync(deployId, `cd ${deployPath} && ${pre}`)
       }
+
+      console.log(`DEPLOY - ${deployId}: Writing .env file`)
+      await writeDotEnvFile({
+        ...utils.prepareEnvs(config, port),
+        PORT: port
+      })
+
       console.log(`DEPLOY - ${deployId}: Starting application`)
-      await execAsync(deployId, `cd ${deployPath} && pm2 start --name ${name} ${config.startFile}`, {
-        env: {
-          ...process.env,
-          ...utils.prepareEnvs(config, port),
-          PORT: port
-        }
+      const [script, args] = config.startFile.split('--').map(s => s.trim())
+      await execPM2('start', {
+        name,
+        script,
+        args,
+        cwd: deployPath
       })
 
       await redis.set(deployId, port)
@@ -246,14 +256,15 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       await execAsync(deployId, `cd ${deployPath} && ${pre}`)
     }
 
-    console.log(`RE-DEPLOY - ${deployId}: Starting application`)
-    await execAsync(deployId, `cd ${deployPath} && pm2 restart ${name} --update-env`, {
-      env: {
-        ...process.env,
-        ...utils.prepareEnvs(config, currentPort),
-        PORT: currentPort
-      }
+    console.log(`RE-DEPLOY - ${deployId}: Writing .env file`)
+    await writeDotEnvFile({
+      ...utils.prepareEnvs(config, currentPort),
+      PORT: currentPort
     })
+
+    console.log(`RE-DEPLOY - ${deployId}: Starting application`)
+    await execPM2('restart', name)
+
     console.log(`RE-DEPLOY - ${deployId}: Finished`)
     await updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
     delete runningTasks[deployId]
@@ -263,6 +274,33 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     delete runningTasks[deployId]
     return Promise.resolve()
   }
+}
+
+function execPM2 (fun, options) {
+  return new Promise((resolve, reject) => {
+    pm2[fun](options, err => {
+      if (err) {
+        reject(err)
+        return
+      }
+
+      resolve()
+    })
+  })
+}
+
+function writeDotEnvFile (envs) {
+  return new Promise((resolve, reject) => {
+    const data = Object.entries(envs).map(([key, val]) => `${key}=${val}`).join('\n')
+    fs.writeFile(path.join(path, '.env'), data, (err) => {
+      if (err) {
+        reject(err)
+        return
+      }
+
+      resolve()
+    })
+  })
 }
 
 function removeDeployment (deployId) {
@@ -298,7 +336,7 @@ function executeRemoveDeployment (deployId) {
   runningTasks[deployId] = { status: 'RUNNING' }
   return redis.del(deployId, statusId)
     .then(() => {
-      return execAsync(deployId, `pm2 delete ${deployId}`)
+      return execPM2('delete', deployId)
         .catch(() => Promise.resolve())
     })
     .then(() => execAsync(deployId, isWin ? `rmdir deploys\\${deployId} /s /q` : `rm -r deploys/${deployId}`))
