@@ -183,13 +183,22 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         await removeDeployment(deployId)
       }
 
-      const allowedPorts = config.port.includes(':') ? getPort.makeRange(...config.port.split(':').map(s => Number.parseInt(s))) : Number.parseInt(config.port)
-      const port = await getPort({ port: allowedPorts })
-
-      if (Array.isArray(allowedPorts) && (port < allowedPorts[0] || port > allowedPorts[allowedPorts.length - 1])) {
-        throw new Error('Could not find available port for config: ' + JSON.stringify(config))
-      } else if (!Array.isArray(allowedPorts) && port !== allowedPorts) {
-        throw new Error('Could not find available port for config: ' + JSON.stringify(config))
+      let port
+      if (config.port.includes(':')) {
+        const [min, max] = config.port.split(':').map(s => Number.parseInt(s))
+        const foundPort = await getPort({ port: getPort.makeRange(min, max) })
+        if (foundPort < min || foundPort > max) {
+          throw new Error('Could not find available port for config: ' + JSON.stringify(config))
+        } else {
+          port = foundPort
+        }
+      } else {
+        const foundPort = await getPort({ port: config.port })
+        if (foundPort !== config.port) {
+          throw new Error('Could not find available port for config: ' + JSON.stringify(config))
+        } else {
+          port = foundPort
+        }
       }
 
       console.log(`DEPLOY - ${deployId}: Starting`)
