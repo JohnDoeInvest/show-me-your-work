@@ -52,7 +52,7 @@ async function checkStatus () {
     switch (info.status) {
       case BUILDING:
       case REBUILDING:
-        deploy(key.replace('-STATUS', ''), info.cloneUrl, info.branch, info.sha)
+        deploy(getConfigForStatus(info), key.replace('-STATUS', ''), info.cloneUrl, info.branch, info.sha)
         break
       case RUNNING:
         break
@@ -60,11 +60,22 @@ async function checkStatus () {
   }
 }
 
+function getConfigForStatus (info) {
+  const repository = info.cloneUrl.replace('https://github.com/', '').slice(0, -4) // Remove '.git'
+  const branch = info.branch
+  return getConfigForRepository(repository, branch)
+}
+
 function getConfigForPayload (eventType, payload) {
-  const matchingConfigs = []
   const branch = getBranchFromPayload(eventType, payload)
+  const repository = payload.repository.full_name
+  return getConfigForRepository(repository, branch)
+}
+
+function getConfigForRepository (repository, branch) {
+  const matchingConfigs = []
   for (const config of configs) {
-    if (payload.repository.full_name === config.repository) {
+    if (repository === config.repository) {
       if (config.branch !== undefined && config.branch !== branch) {
         continue
       }
@@ -79,17 +90,15 @@ function getConfigForPayload (eventType, payload) {
 
   if (matchingConfigs.length === 0) {
     throw new Error('No matching configs for: ' + JSON.stringify({
-      eventType,
       branch,
-      repository: payload.repository.full_name
+      repository
     }))
   }
 
   if (matchingConfigs.length > 1) {
     console.warn('Multiple matching configs for: ' + JSON.stringify({
-      eventType,
       branch,
-      repository: payload.repository.full_name
+      repository
     }) + ' selecting first found')
   }
 
