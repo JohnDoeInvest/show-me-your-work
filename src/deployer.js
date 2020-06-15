@@ -7,8 +7,6 @@ const fs = require('fs')
 const getPort = require('get-port')
 const util = require('util')
 const configs = require('../config.json')
-const path = require('path')
-
 const pm2 = require('pm2')
 
 const statAsync = util.promisify(fs.stat)
@@ -224,19 +222,17 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         await execAsync(deployId, `cd ${deployPath} && ${pre}`)
       }
 
-      console.log(`DEPLOY - ${deployId}: Writing .env file`)
-      await writeDotEnvFile(deployPath, {
-        ...utils.prepareEnvs(config, port),
-        PORT: port
-      })
-
       console.log(`DEPLOY - ${deployId}: Starting application`)
       const [script, args] = config.startFile.split('--').map(s => s.trim())
       await execPM2('start', {
         name,
         script,
         args,
-        cwd: deployPath
+        cwd: deployPath,
+        env: {
+          ...utils.prepareEnvs(config, port),
+          PORT: port
+        }
       })
 
       await redis.set(deployId, port)
@@ -256,14 +252,19 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       await execAsync(deployId, `cd ${deployPath} && ${pre}`)
     }
 
-    console.log(`RE-DEPLOY - ${deployId}: Writing .env file`)
-    await writeDotEnvFile(deployPath, {
-      ...utils.prepareEnvs(config, currentPort),
-      PORT: currentPort
-    })
-
     console.log(`RE-DEPLOY - ${deployId}: Starting application`)
-    await execPM2('restart', name)
+    const [script, args] = config.startFile.split('--').map(s => s.trim())
+    await execPM2('stop', name)
+    await execPM2('start', {
+      name,
+      script,
+      args,
+      cwd: deployPath,
+      env: {
+        ...utils.prepareEnvs(config, currentPort),
+        PORT: currentPort
+      }
+    })
 
     console.log(`RE-DEPLOY - ${deployId}: Finished`)
     await updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
@@ -279,20 +280,6 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
 function execPM2 (fun, options) {
   return new Promise((resolve, reject) => {
     pm2[fun](options, err => {
-      if (err) {
-        reject(err)
-        return
-      }
-
-      resolve()
-    })
-  })
-}
-
-function writeDotEnvFile (deployPath, envs) {
-  return new Promise((resolve, reject) => {
-    const data = Object.entries(envs).map(([key, val]) => `${key}=${val}`).join('\n')
-    fs.writeFile(path.join(deployPath, '.env'), data, (err) => {
       if (err) {
         reject(err)
         return
