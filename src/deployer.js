@@ -302,15 +302,17 @@ function removeDeployment (deployId) {
       } else {
         signal.kill('SIGINT')
       }
-    }
 
-    return new Promise((resolve, reject) => {
-      signal.on('exit', () => {
-        executeRemoveDeployment(deployId)
-          .then(resolve)
-          .catch(reject)
+      return new Promise((resolve, reject) => {
+        signal.on('exit', () => {
+          executeRemoveDeployment(deployId)
+            .then(resolve)
+            .catch(reject)
+        })
       })
-    })
+    } else {
+      return executeRemoveDeployment(deployId)
+    }
   } else {
     return executeRemoveDeployment(deployId)
   }
