@@ -296,11 +296,12 @@ function removeDeployment (deployId) {
     const signal = runningTasks[deployId].currentSignal
     runningTasks[deployId].status = 'ABORTED'
 
-    runningTasks[deployId] = { status: 'RUNNING' }
-    if (isWin) { // process.platform was undefined for me, but this works
-      childProcess.execSync(`taskkill /F /T /PID ${signal.pid}`) // windows specific
-    } else {
-      signal.kill('SIGINT')
+    if (signal !== undefined) {
+      if (isWin) { // process.platform was undefined for me, but this works
+        childProcess.execSync(`taskkill /F /T /PID ${signal.pid}`) // windows specific
+      } else {
+        signal.kill('SIGINT')
+      }
     }
 
     return new Promise((resolve, reject) => {
