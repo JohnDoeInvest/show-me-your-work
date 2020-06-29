@@ -297,20 +297,22 @@ function removeDeployment (deployId) {
     runningTasks[deployId].status = 'ABORTED'
 
     if (signal !== undefined) {
-      if (isWin) { // process.platform was undefined for me, but this works
-        childProcess.execSync(`taskkill /F /T /PID ${signal.pid}`) // windows specific
-      } else {
-        signal.kill('SIGINT')
-      }
-
+      console.info(deployId + ': Stopping running process before removing')
       return new Promise((resolve, reject) => {
         signal.on('exit', () => {
           executeRemoveDeployment(deployId)
             .then(resolve)
             .catch(reject)
         })
+
+        if (isWin) { // process.platform was undefined for me, but this works
+          childProcess.execSync(`taskkill /F /T /PID ${signal.pid}`) // windows specific
+        } else {
+          signal.kill('SIGINT')
+        }
       })
     } else {
+      console.info(deployId + ': No signal to stop before removing')
       return executeRemoveDeployment(deployId)
     }
   } else {
