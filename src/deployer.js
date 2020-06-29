@@ -24,6 +24,7 @@ function execAsync (deployId, command, options) {
   return new Promise(function (resolve, reject) {
     if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
       const child = childProcess.exec(command, options, (error, stdout, stderr) => {
+        runningTasks[deployId].currentSignal = undefined
         if (runningTasks[deployId].status === 'ABORTED') {
           reject(error)
           return
