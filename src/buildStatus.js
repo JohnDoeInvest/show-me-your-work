@@ -10,7 +10,7 @@ if (LINK_HOST === undefined || LINK_HOST === null || LINK_HOST === '') {
 }
 
 const app = express()
-const sse = new SSE()
+const sse = new SSE(['connected']) // Send connected event to init connection
 app.set('views', './src/views')
 app.set('view engine', 'pug')
 
@@ -57,5 +57,10 @@ redis.monitor().then(monitor => {
     }
   })
 })
+
+// Ping the client to keep the connection alive for as long as possible
+setInterval(() => {
+  sse.send('ping')
+}, 30 * 1000)
 
 module.exports = app
