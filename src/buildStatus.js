@@ -1,6 +1,6 @@
 const redis = require('./redis')
 const redisUtils = require('./utils/redisUtils')
-const SSE = require('express-sse')
+const SSE = require('@gazdagandras/express-sse')
 const express = require('express')
 
 const LINK_HOST = process.env.LINK_HOST
