@@ -8,6 +8,7 @@ const getPort = require('get-port')
 const util = require('util')
 const configs = require('../config.json')
 const pm2 = require('pm2')
+const fetch = require('node-fetch').default
 
 const statAsync = util.promisify(fs.stat)
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
@@ -141,6 +142,19 @@ async function checkRunEvent (eventType, payload) {
   if (checkSuite.status === 'completed' && checkSuite.conclusion === 'success') {
     if (config.deployPullRequest === true && checkSuite.pull_requests.length > 0) {
       const pullRequest = checkSuite.pull_requests[0]
+
+      // Fetch the pull request and make sure that it's open before we build it.
+      if (pullRequest) {
+        const prURL = pullRequest.url.replace('https://api.github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@api.github.com')
+        const prRes = await fetch(prURL)
+        if (prRes.ok) {
+          const pr = await prRes.json()
+          if (pr.state !== 'open') {
+            return
+          }
+        }
+      }
+
       const deployId = utils.getIdFromPullRequest(config, pullRequest)
 
       // Remove branch deployment when creating
