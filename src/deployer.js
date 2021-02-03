@@ -197,7 +197,9 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
   if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
     const signal = runningTasks[deployId].currentSignal
     runningTasks[deployId].status = 'ABORTED'
-    signal.kill()
+    if (signal !== undefined) {
+      signal.kill()
+    }
   }
 
   runningTasks[deployId] = { status: 'RUNNING' }
