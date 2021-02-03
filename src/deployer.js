@@ -113,10 +113,17 @@ function getBranchFromPayload (eventType, payload) {
     case 'pull_request':
       return payload.pull_request.head.ref
     case 'check_run':
-      return payload.check_run.check_suite.head_branch
+      return getCheckRunBranch(payload)
     case 'delete':
       return payload.ref.replace('refs/heads/') // This will always return as "refs/heads/BRANCH"
   }
+}
+
+function getCheckRunBranch (payload) {
+  if (payload.check_run.check_suite.head_branch === null) {
+    return payload.repository.default_branch
+  }
+  return payload.check_run.check_suite.head_branch
 }
 
 function pullRequestEvent (eventType, payload) {
@@ -133,7 +140,8 @@ function pullRequestEvent (eventType, payload) {
 }
 
 async function checkRunEvent (eventType, payload) {
-  if (payload.action !== 'completed' || payload.check_run.check_suite.head_branch === null) {
+  const branch = getCheckRunBranch(payload)
+  if (payload.action !== 'completed') {
     return Promise.resolve()
   }
 
@@ -158,16 +166,16 @@ async function checkRunEvent (eventType, payload) {
       const deployId = utils.getIdFromPullRequest(config, pullRequest)
 
       // Remove branch deployment when creating
-      if (!config.staticBranches.includes(checkSuite.head_branch)) {
-        await removeDeployment(utils.getIdFromBranch(config, checkSuite.head_branch))
+      if (!config.staticBranches.includes(branch)) {
+        await removeDeployment(utils.getIdFromBranch(config, branch))
       }
 
-      return deploy(config, deployId, payload.repository.clone_url, checkSuite.head_branch, checkSuite.head_sha)
+      return deploy(config, deployId, payload.repository.clone_url, branch, checkSuite.head_sha)
     } else if (config.deployBranches === true) {
       // We can't be sure that this is the correct branch, since if the SHA has been built on
       // another branch before we will get that branch name
-      const deployId = utils.getIdFromBranch(config, checkSuite.head_branch)
-      return deploy(config, deployId, payload.repository.clone_url, checkSuite.head_branch, checkSuite.head_sha)
+      const deployId = utils.getIdFromBranch(config, branch)
+      return deploy(config, deployId, payload.repository.clone_url, branch, checkSuite.head_sha)
     }
   }
 
