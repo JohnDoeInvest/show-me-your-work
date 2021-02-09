@@ -44,7 +44,7 @@ async function getBuildStatus () {
 redis.monitor().then(monitor => {
   monitor.on('monitor', (time, args, source, database) => {
     const command = args[0].toLowerCase()
-    if (command === 'set' || command === 'del') {
+    if (command === 'hmset' || command === 'del') {
       getBuildStatus().then(statuses => {
         app.render('table', { statuses, linkHost: LINK_HOST }, (err, html) => {
           if (err) {
