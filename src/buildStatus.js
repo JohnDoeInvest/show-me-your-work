@@ -1,7 +1,7 @@
 const redis = require('./redis')
 const redisUtils = require('./utils/redisUtils')
-const SSE = require('@gazdagandras/express-sse')
 const express = require('express')
+const WebSocket = require('ws')
 
 const LINK_HOST = process.env.LINK_HOST
 if (LINK_HOST === undefined || LINK_HOST === null || LINK_HOST === '') {
@@ -9,17 +9,70 @@ if (LINK_HOST === undefined || LINK_HOST === null || LINK_HOST === '') {
   process.exit(1)
 }
 
-const app = express()
-const sse = new SSE(['connected']) // Send connected event to init connection
-app.set('views', './src/views')
-app.set('view engine', 'pug')
+function start (ws) {
+  const app = express()
 
-app.get('/events/', sse.init)
-app.get('/', async (req, res) => {
-  const statuses = await getBuildStatus()
-  res.render('index', { statuses, linkHost: LINK_HOST })
-})
-app.use('/static', express.static('src/public'))
+  app.set('views', './src/views')
+  app.set('view engine', 'pug')
+
+  app.get('/', async (req, res) => {
+    const statuses = await getBuildStatus()
+    const queue = await getBuildQueue()
+    res.render('index', { statuses, queue, linkHost: LINK_HOST })
+  })
+  app.use('/static', express.static('src/public'))
+
+  // Monitor Redis event and send events to client when changes are made
+  redis.monitor().then(monitor => {
+    monitor.on('monitor', (time, args, source, database) => {
+      const command = args[0].toLowerCase()
+      if (command === 'hmset' || command === 'del') {
+        getBuildStatus().then(statuses => {
+          app.render('table', { statuses, linkHost: LINK_HOST }, (err, html) => {
+            if (err) {
+              console.error(err)
+              return
+            }
+            broadcast(ws, JSON.stringify({ html, event: 'status' }))
+          })
+        })
+      } else if (command === 'lpop' || command === 'lindex' || command === 'lrem' || command === 'rpush') {
+        getBuildQueue().then(queue => {
+          app.render('queue', { queue }, (err, html) => {
+            if (err) {
+              console.error(err)
+              return
+            }
+            broadcast(ws, JSON.stringify({ html, event: 'queue' }))
+          })
+        })
+      }
+    })
+  })
+
+  // Ping the client to keep the connection alive for as long as possible
+  setInterval(() => {
+    ping(ws)
+  }, 30 * 1000)
+
+  return app
+}
+
+function broadcast (ws, data) {
+  ws.clients.forEach(function each (client) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(data)
+    }
+  })
+}
+
+function ping (ws) {
+  ws.clients.forEach(function each (client) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.ping()
+    }
+  })
+}
 
 // Create array of build statuses
 async function getBuildStatus () {
@@ -40,27 +93,9 @@ async function getBuildStatus () {
   })
 }
 
-// Monitor Redis event and send events to client when changes are made
-redis.monitor().then(monitor => {
-  monitor.on('monitor', (time, args, source, database) => {
-    const command = args[0].toLowerCase()
-    if (command === 'hmset' || command === 'del') {
-      getBuildStatus().then(statuses => {
-        app.render('table', { statuses, linkHost: LINK_HOST }, (err, html) => {
-          if (err) {
-            console.error(err)
-            return
-          }
-          sse.send(html, 'status')
-        })
-      })
-    }
-  })
-})
+async function getBuildQueue () {
+  const data = await redis.lrange('job_queue', 0, -1)
+  return data.map(val => JSON.parse(val))
+}
 
-// Ping the client to keep the connection alive for as long as possible
-setInterval(() => {
-  sse.send('ping')
-}, 30 * 1000)
-
-module.exports = app
+module.exports = start

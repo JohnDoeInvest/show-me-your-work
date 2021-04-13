@@ -1,6 +1,6 @@
 each val in statuses
   a(href='https://' + val.id + '.' + linkHost target='_blank')
-    div.media.border-bottom.border-grey.pt-2.pb-2.status-item
+    div.media.border-bottom.border-grey.pt-2.pb-2.status-item.rounded
       - const svg = val.type === 'pull-request' ? 'git-pull-request.svg' : 'git-branch.svg'
       img(src='/status/static/assets/' + svg class=(val.status === 'RUNNING' ? 'icon-success' : 'icon-warning')).icon.mr-2.align-self-center
       div.media-body

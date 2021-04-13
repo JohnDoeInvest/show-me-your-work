@@ -5,9 +5,17 @@ html
       include ../public/css/bootstrap.min.css
       include ../public/css/style.css
   body
-    div.container
-      h1.text-center.border-bottom.border-grey.mb-0.pb-2 Show Me Your Work - Build Status
-      div#table
-        include ./table.pug
+    div
+      h1.text-center Show Me Your Work
+      div.container-fluid.px-5
+        div.row
+          div.col-lg-3.order-1.order-lg-0.mt-4.mt-lg-0
+            h4 Queue
+            div#queue
+              include ./queue.pug
+          div.col
+            h4 Status
+            div#status
+              include ./table.pug
 
     script(src='/status/static/js/socket.js')

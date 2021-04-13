@@ -1,4 +1,5 @@
 const crypto = require('crypto')
+const childProcess = require('child_process')
 
 function verifySignature (req, payloadBody, secret) {
   const receivedSignature = req.header('X-HUB-SIGNATURE')
@@ -37,10 +38,24 @@ function prepareEnvs (config, port) {
   return envs
 }
 
+function execAsync (command, options) {
+  return new Promise(function (resolve, reject) {
+    childProcess.exec(command, options, (error, stdout, stderr) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      resolve()
+    })
+  })
+}
+
 module.exports = {
   verifySignature,
   getIdFromPullRequest,
   getIdFromBranch,
   getIdFromTag,
-  prepareEnvs
+  prepareEnvs,
+  execAsync
 }

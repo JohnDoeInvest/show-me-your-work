@@ -1,11 +1,13 @@
 require('dotenv').config()
 
 const express = require('express')
+const http = require('http')
 const pm2 = require('pm2')
 
 const utils = require('./utils/utils')
 const deployer = require('./deployer')
 const buildStatus = require('./buildStatus')
+const WebSocket = require('ws')
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'testing'
 const PORT = process.env.PORT || 3000
@@ -13,8 +15,10 @@ const PORT = process.env.PORT || 3000
 const app = express()
 app.disable('x-powered-by')
 app.use(express.json())
+const server = http.createServer(app)
+const ws = new WebSocket.Server({ server, path: '/events' })
 
-app.use('/status', buildStatus)
+app.use('/status', buildStatus(ws))
 
 app.use((req, res, next) => {
   if (utils.verifySignature(req, JSON.stringify(req.body), WEBHOOK_SECRET)) {
@@ -55,7 +59,7 @@ pm2.connect(err => {
   }
 
   deployer.checkStatus().then(() => {
-    app.listen(PORT, () => console.log(`Listening to port ${PORT}`))
+    server.listen(PORT, () => console.log(`Listening to port ${PORT}`))
   }).catch((e) => {
     console.error(e)
     process.exit(1)

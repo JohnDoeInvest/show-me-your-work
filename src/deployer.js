@@ -2,52 +2,114 @@ const utils = require('./utils/utils')
 const redisUtils = require('./utils/redisUtils')
 const redis = require('./redis')
 const { BUILDING, REBUILDING, RUNNING } = require('./buildStatusState')
-const childProcess = require('child_process')
 const fs = require('fs')
+const path = require('path')
 const getPort = require('get-port')
 const util = require('util')
-const configs = require('../config.json')
+const configUtils = require('./utils/config')
 const pm2 = require('pm2')
 const fetch = require('node-fetch').default
 
 const statAsync = util.promisify(fs.stat)
+const rmDirAsync = util.promisify(fs.rmdir)
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
 
-/** This contains the following
- *  {
- *    currentSignal: Signal,
- *    status: 'ABORTED' | 'RUNNING'
- *  }
+/**
+ * Earlier implementations tried to be efficient about what was being built/removed/started etc. by
+ * stopping processes. This never really worked since there seems to be to many edge cases. Moving
+ * away from this lead me to "just" a queue.
+ *
+ * The queue is in Redis. This should allow Node to be smart about async tasks and us to not have to
+ * worry about tasks interfering. The 0:th item in the queue is always the currently running one.
  */
-const runningTasks = {}
 
-function execAsync (deployId, command, options) {
-  return new Promise(function (resolve, reject) {
-    if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
-      const child = childProcess.exec(command, options, (error, stdout, stderr) => {
-        if (runningTasks[deployId]) {
-          runningTasks[deployId].currentSignal = undefined
-          if (runningTasks[deployId].status === 'ABORTED') {
-            reject(error)
-            return
-          }
-        }
+// Command types
+const COMMAND_DEPLOY = 'DEPLOY'
+const COMMAND_REMOVE = 'REMOVE'
 
-        if (error) {
-          reject(error)
-          return
-        }
+const QUEUE_KEY = 'job_queue'
 
-        resolve()
-      })
-      runningTasks[deployId].currentSignal = child
-    } else {
-      if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'ABORTED') {
-        reject(new Error('Aborted for unknown reason'))
-      }
-      console.warn('Trying to start child process without a running task')
+// Start handling the queue
+redis.monitor().then(monitor => handleQueue(monitor))
+
+async function handleQueue (monitor) {
+  let job = await redis.lindex(QUEUE_KEY, 0)
+
+  /* TODO: Handle more than one job at the time.
+   *
+   * I looked at using something like https://github.com/bee-queue/bee-queue since it already does
+   * what we want. We might still need some custom logic for some edge cases (see below)
+   *
+   * Remember edge cases like: [DEPLOY_BRANCH_A, REMOVE_BRANCH_A, DEPLOY_PR_OF_BRANCH_A] (Take jobs
+   *   from left to right)
+   *
+   * If we run a simple LIFO and process this concurrently we would try to deploy and remove branch
+   * A at the same time. So we would have to make sure that this can no happen. Even if we clear the
+   * jobs with the same deployId when adding a job we might already be running the deploy and start
+   * out remove while the deploy is running. Using our own queue would probably allow us to handle
+   * these things, but another queue system might be a bit harder. If we use Bee-Queue we can use
+   * something like:
+   *
+   * queue.getJobs('active', { start: 0, end: NUMBER_OF_CONCURRENT }).then(jobs => {
+   *   // We need to delay our current job if another job is active with the same deployId
+   * })
+   *
+   * And to remove the jobs which are currently waiting with the same deployId we can do:
+   *
+   * // If we can have more than 100 jobs I'd be surprised
+   * queue.getJobs('waiting', { start: 0, end: 100 }).then(jobs => {
+   *   // We should remove all of the jobs that match the deployId and after this we
+   *   // can add the new job.
+   * })
+   */
+  while (true) {
+    if (job === null) {
+      await pushedJob(monitor)
+      job = await redis.lindex(QUEUE_KEY, 0)
     }
+
+    const jobData = JSON.parse(job)
+    await runCommand(jobData)
+    await redis.lpop(QUEUE_KEY)
+    job = await redis.lindex(QUEUE_KEY, 0)
+  }
+}
+
+// Wait for RPUSH to the QUEUE_KEY
+function pushedJob (monitor) {
+  return new Promise((resolve, reject) => {
+    monitor.on('monitor', (time, args, source, database) => {
+      const command = args[0].toLowerCase()
+      const key = args[1]
+      if (command === 'rpush' && key === QUEUE_KEY) {
+        resolve()
+      }
+    })
   })
+}
+
+function runCommand ({ commandType, deployId, config, deployData }) {
+  if (commandType === COMMAND_DEPLOY) {
+    return deploy(config, deployId, deployData.cloneUrl, deployData.branch, deployData.sha)
+  } else if (commandType === COMMAND_REMOVE) {
+    return removeDeployment(deployId)
+  }
+}
+
+async function addToQueue (commandType, deployId, config, deployData) {
+  // TODO: Be smarter about what is put in the queue. If we already have a task (not at index 0)
+  // which handles the same deployId, we should probably replace it.
+  const queue = await redis.lrange(QUEUE_KEY, 0, -1)
+  if (queue !== null) {
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i]
+      const job = JSON.parse(item)
+      if (job.deployId === deployId && i !== 0) {
+        await redis.lrem(QUEUE_KEY, 1, item)
+      }
+    }
+  }
+  await redis.rpush(QUEUE_KEY, JSON.stringify({ commandType, deployId, config, deployData }))
 }
 
 async function checkStatus () {
@@ -57,7 +119,7 @@ async function checkStatus () {
     switch (info.status) {
       case BUILDING:
       case REBUILDING:
-        deploy(getConfigForStatus(info), key.replace('-STATUS', ''), info.cloneUrl, info.branch, info.sha)
+        addToQueue(COMMAND_DEPLOY, key.replace('-STATUS', ''), configUtils.getConfigForStatus(info), info.cloneUrl, info.branch, info.sha)
         break
       case RUNNING:
         break
@@ -65,95 +127,31 @@ async function checkStatus () {
   }
 }
 
-function getConfigForStatus (info) {
-  const repository = info.cloneUrl.replace('https://github.com/', '').slice(0, -4) // Remove '.git'
-  const branch = info.branch
-  return getConfigForRepository(repository, branch)
-}
-
-function getConfigForPayload (eventType, payload) {
-  const branch = getBranchFromPayload(eventType, payload)
-  const repository = payload.repository.full_name
-  return getConfigForRepository(repository, branch)
-}
-
-function getConfigForRepository (repository, branch) {
-  const matchingConfigs = []
-  for (const config of configs) {
-    if (repository === config.repository) {
-      if (config.branch !== undefined && config.branch !== branch) {
-        continue
-      }
-
-      if (config.branchBlackList !== undefined && config.branchBlackList.includes(branch)) {
-        continue
-      }
-
-      matchingConfigs.push(config)
-    }
-  }
-
-  if (matchingConfigs.length === 0) {
-    throw new Error('No matching configs for: ' + JSON.stringify({
-      branch,
-      repository
-    }))
-  }
-
-  if (matchingConfigs.length > 1) {
-    console.warn('Multiple matching configs for: ' + JSON.stringify({
-      branch,
-      repository
-    }) + ' selecting first found')
-  }
-
-  return matchingConfigs[0]
-}
-
-function getBranchFromPayload (eventType, payload) {
-  switch (eventType) {
-    case 'pull_request':
-      return payload.pull_request.head.ref
-    case 'check_run':
-      return getCheckRunBranch(payload)
-    case 'delete':
-      return payload.ref.replace('refs/heads/') // This will always return as "refs/heads/BRANCH"
-  }
-}
-
-function getCheckRunBranch (payload) {
-  if (payload.check_run.check_suite.head_branch === null) {
-    return payload.repository.default_branch
-  }
-  return payload.check_run.check_suite.head_branch
-}
-
 function pullRequestEvent (eventType, payload) {
   // TODO: When a PR is re-opened it would be nice if it was deployed again, the issues is that the
   // Check Suite doesn't run again. So we would have to do it on the re-open but also check that
   // all checks have been ran somehow.
-  const config = getConfigForPayload(eventType, payload)
+  const config = configUtils.getConfigForPayload(eventType, payload)
   const deployId = utils.getIdFromPullRequest(config, payload)
   if (payload.action === 'closed') {
-    return removeDeployment(deployId)
+    return addToQueue(COMMAND_REMOVE, deployId, config)
   } else {
     return Promise.resolve()
   }
 }
 
 async function checkRunEvent (eventType, payload) {
-  const branch = getCheckRunBranch(payload)
+  const branch = configUtils.getCheckRunBranch(payload)
   if (payload.action !== 'completed') {
     return Promise.resolve()
   }
 
-  const config = getConfigForPayload(eventType, payload)
+  const config = configUtils.getConfigForPayload(eventType, payload)
   const checkSuite = payload.check_run.check_suite
   if (checkSuite.status === 'completed' && checkSuite.conclusion === 'success') {
     if (config.deployPullRequest === true && checkSuite.pull_requests.length > 0) {
       const pullRequest = checkSuite.pull_requests[0]
 
-      // Fetch the pull request and make sure that it's open before we build it.
       if (pullRequest) {
         const prURL = pullRequest.url.replace('https://api.github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@api.github.com')
         const prRes = await fetch(prURL)
@@ -169,15 +167,15 @@ async function checkRunEvent (eventType, payload) {
 
       // Remove branch deployment when creating
       if (!config.staticBranches.includes(branch)) {
-        await removeDeployment(utils.getIdFromBranch(config, branch))
+        addToQueue(COMMAND_REMOVE, utils.getIdFromBranch(config, branch), config)
       }
 
-      return deploy(config, deployId, payload.repository.clone_url, branch, checkSuite.head_sha)
+      addToQueue(COMMAND_DEPLOY, deployId, config, { cloneUrl: payload.repository.clone_url, branch: branch, sha: checkSuite.head_sha })
     } else if (config.deployBranches === true) {
       // We can't be sure that this is the correct branch, since if the SHA has been built on
       // another branch before we will get that branch name
       const deployId = utils.getIdFromBranch(config, branch)
-      return deploy(config, deployId, payload.repository.clone_url, branch, checkSuite.head_sha)
+      addToQueue(COMMAND_DEPLOY, deployId, config, { cloneUrl: payload.repository.clone_url, branch: branch, sha: checkSuite.head_sha })
     }
   }
 
@@ -188,21 +186,12 @@ function deleteEvent (eventType, payload) {
   if (payload.ref_type === 'tag') {
     return Promise.resolve()
   }
-  const config = getConfigForPayload(eventType, payload)
+  const config = configUtils.getConfigForPayload(eventType, payload)
   const deployId = utils.getIdFromBranch(config, payload.ref)
-  return removeDeployment(deployId)
+  return addToQueue(COMMAND_REMOVE, deployId, config)
 }
 
 async function deploy (config, deployId, cloneUrl, branch, sha) {
-  if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
-    const signal = runningTasks[deployId].currentSignal
-    runningTasks[deployId].status = 'ABORTED'
-    if (signal !== undefined) {
-      signal.kill()
-    }
-  }
-
-  runningTasks[deployId] = { status: 'RUNNING' }
   try {
     const url = cloneUrl.replace('https://github.com', 'https://' + GITHUB_ACCESS_TOKEN + '@github.com')
     const deployPath = `deploys/${deployId}`
@@ -240,13 +229,13 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
 
       console.log(`DEPLOY - ${deployId}: Starting`)
       await updateStatus(deployId, BUILDING, cloneUrl, branch, sha)
-      await execAsync(deployId, `git clone --depth=50 --branch=${branch} ${url} ${deployPath}`)
+      await utils.execAsync(`git clone --depth=50 --branch=${branch} ${url} ${deployPath}`)
       console.log(`DEPLOY - ${deployId}: Installing dependencies`)
-      await execAsync(deployId, `cd ${deployPath} && git checkout -qf ${sha}`)
+      await utils.execAsync(`cd ${deployPath} && git checkout -qf ${sha}`)
       console.log(`DEPLOY - ${deployId}: Running pre-start commands`)
 
       for (const pre of config.pre) {
-        await execAsync(deployId, `cd ${deployPath} && ${pre}`)
+        await utils.execAsync(`cd ${deployPath} && ${pre}`)
       }
 
       console.log(`DEPLOY - ${deployId}: Starting application`)
@@ -270,13 +259,13 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     // We already have a deployment running so we should update that
     console.log(`RE-DEPLOY - ${deployId}: Starting`)
     await updateStatus(deployId, REBUILDING, cloneUrl, branch, sha)
-    await execAsync(deployId, `cd ${deployPath} && git fetch`)
+    await utils.execAsync(`cd ${deployPath} && git fetch`)
     console.log(`RE-DEPLOY - ${deployId}: Installing dependencies`)
-    await execAsync(deployId, `cd ${deployPath} && git checkout -qf ${sha}`)
+    await utils.execAsync(`cd ${deployPath} && git checkout -qf ${sha}`)
     console.log(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
 
     for (const pre of config.pre) {
-      await execAsync(deployId, `cd ${deployPath} && ${pre}`)
+      await utils.execAsync(`cd ${deployPath} && ${pre}`)
     }
 
     console.log(`RE-DEPLOY - ${deployId}: Starting application`)
@@ -295,11 +284,9 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
 
     console.log(`RE-DEPLOY - ${deployId}: Finished`)
     await updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
-    delete runningTasks[deployId]
     return Promise.resolve()
   } catch (e) {
     console.log(`${deployId}: Aborted`, e)
-    delete runningTasks[deployId]
     return Promise.resolve()
   }
 }
@@ -318,52 +305,18 @@ function execPM2 (fun, options) {
 }
 
 function removeDeployment (deployId) {
-  const isWin = process.platform === 'win32'
-  if (runningTasks[deployId] !== undefined && runningTasks[deployId].status === 'RUNNING') {
-    const signal = runningTasks[deployId].currentSignal
-    runningTasks[deployId].status = 'ABORTED'
-
-    if (signal !== undefined) {
-      console.info(deployId + ': Stopping running process before removing')
-      return new Promise((resolve, reject) => {
-        signal.on('exit', () => {
-          executeRemoveDeployment(deployId)
-            .then(resolve)
-            .catch(reject)
-        })
-
-        if (isWin) { // process.platform was undefined for me, but this works
-          childProcess.execSync(`taskkill /F /T /PID ${signal.pid}`) // windows specific
-        } else {
-          signal.kill('SIGINT')
-        }
-      })
-    } else {
-      console.info(deployId + ': No signal to stop before removing')
-      return executeRemoveDeployment(deployId)
-    }
-  } else {
-    return executeRemoveDeployment(deployId)
-  }
-}
-
-function executeRemoveDeployment (deployId) {
   const statusId = deployId + '-STATUS'
   console.log(deployId + ': Removing deployment')
-  const isWin = process.platform === 'win32'
 
-  runningTasks[deployId] = { status: 'RUNNING' }
   return redis.del(deployId, statusId)
     .then(() => {
       return execPM2('delete', deployId)
         .catch(() => Promise.resolve())
     })
-    .then(() => execAsync(deployId, isWin ? `rmdir deploys\\${deployId} /s /q` : `rm -r deploys/${deployId}`))
+    .then(() => rmDirAsync(path.resolve('deploys', deployId), { recursive: true }))
     .then(() => console.log(deployId + ': Removed deployment'))
-    .then(() => delete runningTasks[deployId])
     .catch(e => {
       console.log(e.message)
-      delete runningTasks[deployId]
       Promise.resolve()
     })
 }

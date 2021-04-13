@@ -1,0 +1,8 @@
+each val in queue
+  div.media.bg-lightish.rounded.p-2
+    div.media-body
+      h6.text-dark.mb-1=val.deployId
+      p.text-muted.small.mb-0=' ' + val.commandType
+else
+  div.media.bg-lightish.rounded.p-2
+    h5.text-muted.text-center.w-100 Nothing in build queue
