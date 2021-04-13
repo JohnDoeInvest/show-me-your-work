@@ -9,7 +9,6 @@
   "author": "Henrik Olsson",
   "license": "MIT",
   "dependencies": {
-    "@gazdagandras/express-sse": "^0.5.5",
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
     "get-port": "^5.1.1",
