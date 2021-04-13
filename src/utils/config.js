@@ -50,13 +50,21 @@ function getBranchFromPayload (eventType, payload) {
     case 'pull_request':
       return payload.pull_request.head.ref
     case 'check_run':
-      return payload.check_run.check_suite.head_branch
+      return getCheckRunBranch(payload)
     case 'delete':
       return payload.ref.replace('refs/heads/') // This will always return as "refs/heads/BRANCH"
   }
 }
 
+function getCheckRunBranch (payload) {
+  if (payload.check_run.check_suite.head_branch === null) {
+    return payload.repository.default_branch
+  }
+  return payload.check_run.check_suite.head_branch
+}
+
 module.exports = {
   getConfigForStatus,
-  getConfigForPayload
+  getConfigForPayload,
+  getCheckRunBranch
 }
