@@ -19,3 +19,7 @@ a:hover {
   color: #0056b3;
   text-decoration: none
 }
+
+.bg-lightish {
+  background-color: #ececec;
+}

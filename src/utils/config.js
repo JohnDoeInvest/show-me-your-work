@@ -1,4 +1,4 @@
-const configs = require('../config.json')
+const configs = require('../../config.json')
 
 function getConfigForStatus (info) {
   const repository = info.cloneUrl.replace('https://github.com/', '').slice(0, -4) // Remove '.git'

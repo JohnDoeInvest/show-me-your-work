@@ -60,13 +60,14 @@ async function handleQueue (monitor) {
    * })
    */
   while (true) {
-    await runCommand(JSON.parse(job))
-    await redis.lpop(QUEUE_KEY)
-    job = await redis.lindex(QUEUE_KEY, 0)
     if (job === null) {
       await pushedJob(monitor)
       job = await redis.lindex(QUEUE_KEY, 0)
     }
+
+    await runCommand(JSON.parse(job))
+    await redis.lpop(QUEUE_KEY)
+    job = await redis.lindex(QUEUE_KEY, 0)
   }
 }
 
@@ -144,7 +145,7 @@ async function checkRunEvent (eventType, payload) {
   if (checkSuite.status === 'completed' && checkSuite.conclusion === 'success') {
     if (config.deployPullRequest === true && checkSuite.pull_requests.length > 0) {
       const pullRequest = checkSuite.pull_requests[0]
-      // TODO: Check that the PR is open still, 
+      // TODO: Check that the PR is open still,
       const deployId = utils.getIdFromPullRequest(config, pullRequest)
 
       // Remove branch deployment when creating

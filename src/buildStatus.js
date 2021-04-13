@@ -17,7 +17,8 @@ app.set('view engine', 'pug')
 app.get('/events/', sse.init)
 app.get('/', async (req, res) => {
   const statuses = await getBuildStatus()
-  res.render('index', { statuses, linkHost: LINK_HOST })
+  const queue = await getBuildQueue()
+  res.render('index', { statuses, queue, linkHost: LINK_HOST })
 })
 app.use('/static', express.static('src/public'))
 
@@ -40,6 +41,10 @@ async function getBuildStatus () {
   })
 }
 
+async function getBuildQueue () {
+  return redis.lrange('job_queue', 0, -1)
+}
+
 // Monitor Redis event and send events to client when changes are made
 redis.monitor().then(monitor => {
   monitor.on('monitor', (time, args, source, database) => {
@@ -54,13 +59,23 @@ redis.monitor().then(monitor => {
           sse.send(html, 'status')
         })
       })
+    } else if (command === 'lpop' || command === 'lindex' || command === 'lrem' || command === 'rpush') {
+      getBuildQueue().then(queue => {
+        app.render('queue', { queue }, (err, html) => {
+          if (err) {
+            console.error(err)
+            return
+          }
+          sse.send(html, 'queue')
+        })
+      })
     }
   })
 })
 
 // Ping the client to keep the connection alive for as long as possible
 setInterval(() => {
-  sse.send('ping')
+  // sse.send('ping')
 }, 30 * 1000)
 
 module.exports = app
