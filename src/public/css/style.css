@@ -23,3 +23,7 @@ a:hover {
 .bg-lightish {
   background-color: #ececec;
 }
+
+#queue > div:not(:first-child) {
+  margin-top: 0.5rem;
+}
