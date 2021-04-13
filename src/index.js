@@ -16,7 +16,7 @@ const app = express()
 app.disable('x-powered-by')
 app.use(express.json())
 const server = http.createServer(app)
-const ws = new WebSocket.Server({ server })
+const ws = new WebSocket.Server({ server, path: '/events' })
 
 app.use('/status', buildStatus(ws))
 

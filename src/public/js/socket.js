@@ -1,5 +1,6 @@
-const hrefNoProtocol = location.href.replace(location.protocol, '')
-const ws = new WebSocket(location.hostname === 'localhost' ? 'ws://localhost:3000' : 'wss://' + hrefNoProtocol)
+const hrefNoProtocol = location.origin.replace(location.protocol, '')
+const url = location.hostname === 'localhost' ? 'ws://localhost:3000' : 'wss://' + hrefNoProtocol
+const ws = new WebSocket(url + '/events')
 const domparser = new DOMParser()
 ws.addEventListener('message', function (event) {
   const message = JSON.parse(event.data)
