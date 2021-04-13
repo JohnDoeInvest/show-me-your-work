@@ -65,7 +65,9 @@ async function handleQueue (monitor) {
       job = await redis.lindex(QUEUE_KEY, 0)
     }
 
-    await runCommand(JSON.parse(job))
+    const jobData = JSON.parse(job)
+    console.log(jobData)
+    await runCommand(jobData)
     await redis.lpop(QUEUE_KEY)
     job = await redis.lindex(QUEUE_KEY, 0)
   }
