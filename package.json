@@ -11,11 +11,11 @@
   "dependencies": {
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
-    "express-sse": "^0.5.3",
     "get-port": "^5.1.1",
     "ioredis": "^4.11.2",
     "pm2": "^4.4.0",
-    "pug": "^2.0.4"
+    "pug": "^2.0.4",
+    "ws": "^7.4.4"
   },
   "devDependencies": {
     "eslint": "^6.8.0",
