@@ -52,7 +52,7 @@ function start (ws) {
 
   // Ping the client to keep the connection alive for as long as possible
   setInterval(() => {
-    // sse.send('ping')
+    ping(ws)
   }, 30 * 1000)
 
   return app
@@ -62,6 +62,14 @@ function broadcast (ws, data) {
   ws.clients.forEach(function each (client) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(data)
+    }
+  })
+}
+
+function ping (ws) {
+  ws.clients.forEach(function each (client) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.ping()
     }
   })
 }
