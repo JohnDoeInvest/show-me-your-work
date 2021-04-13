@@ -61,7 +61,9 @@ async function handleQueue (monitor) {
    */
   while (true) {
     if (job === null) {
+      console.log('Waiting for pushed job')
       await pushedJob(monitor)
+      console.log('Job was pushed')
       job = await redis.lindex(QUEUE_KEY, 0)
     }
 
@@ -69,6 +71,7 @@ async function handleQueue (monitor) {
     console.log(jobData)
     await runCommand(jobData)
     await redis.lpop(QUEUE_KEY)
+    console.log('Popped job')
     job = await redis.lindex(QUEUE_KEY, 0)
   }
 }
