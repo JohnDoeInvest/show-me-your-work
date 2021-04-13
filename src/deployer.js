@@ -61,17 +61,13 @@ async function handleQueue (monitor) {
    */
   while (true) {
     if (job === null) {
-      console.log('Waiting for pushed job')
       await pushedJob(monitor)
-      console.log('Job was pushed')
       job = await redis.lindex(QUEUE_KEY, 0)
     }
 
     const jobData = JSON.parse(job)
-    console.log(jobData)
     await runCommand(jobData)
     await redis.lpop(QUEUE_KEY)
-    console.log('Popped job')
     job = await redis.lindex(QUEUE_KEY, 0)
   }
 }
@@ -102,9 +98,10 @@ async function addToQueue (commandType, deployId, config, deployData) {
   // which handles the same deployId, we should probably replace it.
   const queue = await redis.lrange(QUEUE_KEY, 0, -1)
   if (queue !== null) {
-    for (const item of queue) {
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i]
       const job = JSON.parse(item)
-      if (job.deployId === deployId) {
+      if (job.deployId === deployId && i !== 0) {
         await redis.lrem(QUEUE_KEY, 1, item)
       }
     }
