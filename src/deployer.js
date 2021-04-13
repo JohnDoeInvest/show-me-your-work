@@ -3,12 +3,14 @@ const redisUtils = require('./utils/redisUtils')
 const redis = require('./redis')
 const { BUILDING, REBUILDING, RUNNING } = require('./buildStatusState')
 const fs = require('fs')
+const path = require('path')
 const getPort = require('get-port')
 const util = require('util')
 const configUtils = require('./utils/config')
 const pm2 = require('pm2')
 
 const statAsync = util.promisify(fs.stat)
+const rmDirAsync = util.promisify(fs.rmdir)
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
 
 /**
@@ -292,14 +294,13 @@ function execPM2 (fun, options) {
 function removeDeployment (deployId) {
   const statusId = deployId + '-STATUS'
   console.log(deployId + ': Removing deployment')
-  const isWin = process.platform === 'win32'
 
   return redis.del(deployId, statusId)
     .then(() => {
       return execPM2('delete', deployId)
         .catch(() => Promise.resolve())
     })
-    .then(() => utils.execAsync(deployId, isWin ? `rmdir deploys\\${deployId} /s /q` : `rm -r deploys/${deployId}`))
+    .then(() => rmDirAsync(path.resolve('deploys', deployId), { recursive: true }))
     .then(() => console.log(deployId + ': Removed deployment'))
     .catch(e => {
       console.log(e.message)
