@@ -171,7 +171,7 @@ function deleteEvent (eventType, payload) {
   }
   const config = configUtils.getConfigForPayload(eventType, payload)
   const deployId = utils.getIdFromBranch(config, payload.ref)
-  addToQueue(COMMAND_REMOVE, deployId, config)
+  return addToQueue(COMMAND_REMOVE, deployId, config)
 }
 
 async function deploy (config, deployId, cloneUrl, branch, sha) {
