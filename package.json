@@ -14,16 +14,15 @@
     "get-port": "^5.1.1",
     "ioredis": "^4.11.2",
     "node-fetch": "^2.6.1",
-    "pm2": "^4.5.6",
+    "pm2": "^5.1.0",
     "pug": "^3.0.2",
-    "ws": "^7.4.4"
+    "ws": "^7.5.0"
   },
   "devDependencies": {
-    "eslint": "^6.8.0",
-    "eslint-config-standard": "^14.1.0",
-    "eslint-plugin-import": "^2.18.2",
-    "eslint-plugin-node": "^11.0.0",
-    "eslint-plugin-promise": "^4.2.1",
-    "eslint-plugin-standard": "^4.0.0"
+    "eslint": "^7.29.0",
+    "eslint-config-standard": "^16.0.3",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.3.1"
   }
 }
