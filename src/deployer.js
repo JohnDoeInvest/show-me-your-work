@@ -119,7 +119,7 @@ async function checkStatus () {
     switch (info.status) {
       case BUILDING:
       case REBUILDING:
-        addToQueue(COMMAND_DEPLOY, key.replace('-STATUS', ''), configUtils.getConfigForStatus(info), info.cloneUrl, info.branch, info.sha)
+        addToQueue(COMMAND_DEPLOY, key.replace('-STATUS', ''), configUtils.getConfigForStatus(info), info)
         break
       case RUNNING:
         break
