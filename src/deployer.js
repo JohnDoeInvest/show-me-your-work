@@ -247,7 +247,8 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         cwd: deployPath,
         env: {
           ...utils.prepareEnvs(config, port),
-          PORT: port
+          PORT: port,
+          BASE_URL: 'https://' + deployId + '.' + config.linkHost
         }
       })
 
@@ -278,7 +279,8 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       cwd: deployPath,
       env: {
         ...utils.prepareEnvs(config, currentPort),
-        PORT: currentPort
+        PORT: currentPort,
+        BASE_URL: 'https://' + deployId + '.' + config.linkHost
       }
     })
 
