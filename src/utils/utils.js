@@ -23,11 +23,11 @@ function getIdFromPullRequest (config, pullRequest) {
 }
 
 function getIdFromBranch (config, ref) {
-  return `${getIdPrefix(config)}-branch-${ref.replace('refs/heads/')}`
+  return `${getIdPrefix(config)}-branch-${ref.replace('refs/heads/', '')}`
 }
 
 function getIdFromTag (config, ref) {
-  return `${getIdPrefix(config)}-tag-${ref.replace('refs/tags/')}`
+  return `${getIdPrefix(config)}-tag-${ref.replace('refs/tags/', '')}`
 }
 
 function prepareEnvs (config, port) {
