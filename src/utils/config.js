@@ -67,5 +67,6 @@ function getCheckRunBranch (payload) {
 module.exports = {
   getConfigForStatus,
   getConfigForPayload,
+  getBranchFromPayload,
   getCheckRunBranch
 }
