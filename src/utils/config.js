@@ -53,7 +53,7 @@ function getBranchFromPayload (eventType, payload) {
       return getCheckRunBranch(payload)
     case 'delete':
     case 'push':
-      return payload.ref.replace('refs/heads/') // This will always return as "refs/heads/BRANCH"
+      return payload.ref.replace('refs/heads/', '') // This will always return as "refs/heads/BRANCH"
   }
 }
 
