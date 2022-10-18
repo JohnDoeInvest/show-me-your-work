@@ -140,6 +140,19 @@ function pullRequestEvent (eventType, payload) {
   }
 }
 
+async function pushEvent (eventType, payload) {
+  const branch = configUtils.getBranchFromPayload(payload)
+  const config = configUtils.getConfigForPayload(eventType, payload)
+  if (config.ignoreCheck) {
+    // We can't be sure that this is the correct branch, since if the SHA has been built on
+    // another branch before we will get that branch name
+    const deployId = utils.getIdFromBranch(config, branch)
+    addToQueue(COMMAND_DEPLOY, deployId, config, { cloneUrl: payload.repository.clone_url, branch: branch, sha: payload.after })
+  }
+
+  return Promise.resolve()
+}
+
 async function checkRunEvent (eventType, payload) {
   const branch = configUtils.getCheckRunBranch(payload)
   if (payload.action !== 'completed') {
@@ -338,5 +351,6 @@ module.exports = {
   pullRequestEvent,
   checkRunEvent,
   deleteEvent,
-  checkStatus
+  checkStatus,
+  pushEvent
 }

@@ -44,6 +44,8 @@ function handleEvent (eventType, payload) {
       return deployer.pullRequestEvent(eventType, payload)
     case 'check_run':
       return deployer.checkRunEvent(eventType, payload)
+    case 'push':
+      return deployer.pushEvent(eventType, payload)
     case 'delete':
       return deployer.deleteEvent(eventType, payload)
     default:
