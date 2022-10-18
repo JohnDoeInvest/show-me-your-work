@@ -141,7 +141,7 @@ function pullRequestEvent (eventType, payload) {
 }
 
 async function pushEvent (eventType, payload) {
-  const branch = configUtils.getBranchFromPayload(payload)
+  const branch = configUtils.getBranchFromPayload(eventType, payload)
   const config = configUtils.getConfigForPayload(eventType, payload)
   if (config.ignoreCheck) {
     // We can't be sure that this is the correct branch, since if the SHA has been built on
