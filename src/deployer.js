@@ -142,7 +142,7 @@ function pullRequestEvent (eventType, payload) {
 
 async function pushEvent (eventType, payload) {
   // Make sure that only branches are used
-  if (!payload.ref.contains('refs/heads')) {
+  if (!payload.ref.includes('refs/heads')) {
     return
   }
   const branch = configUtils.getBranchFromPayload(eventType, payload)
