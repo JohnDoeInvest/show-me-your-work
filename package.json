@@ -10,19 +10,19 @@
   "license": "MIT",
   "dependencies": {
     "dotenv": "^8.2.0",
-    "express": "^4.17.1",
+    "express": "^4.18.2",
     "get-port": "^5.1.1",
     "ioredis": "^4.11.2",
     "node-fetch": "^2.6.7",
-    "pm2": "^5.2.0",
+    "pm2": "^5.3.0",
     "pug": "^3.0.2",
     "ws": "^7.5.0"
   },
   "devDependencies": {
-    "eslint": "^7.29.0",
-    "eslint-config-standard": "^16.0.3",
-    "eslint-plugin-import": "^2.22.1",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^4.3.1"
+    "eslint": "^8.42.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-n": "^16.0.0",
+    "eslint-plugin-promise": "^6.1.1"
   }
 }
