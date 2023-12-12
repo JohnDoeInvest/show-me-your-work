@@ -236,23 +236,26 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         await utils.execAsync(`cd ${deployPath} && ${pre}`)
       }
 
-      const port = configUtils.getAvailablePort(config)
-      const usedPorts = [port]
-      const additionalData = config.additionalServers.map((a, s) => {
+      const port = await configUtils.getAvailablePort(config)
+      const addPorts = []
+      // eslint-disable-next-line no-unused-vars
+      for (const s of config.additionalServers) {
+        addPorts.push(await configUtils.getAvailablePort(config, [port, ...addPorts]))
+      }
+
+      const additionalData = config.additionalServers.map((a, s, i) => {
         const addDeployId = getDeploymentId(deployId, s)
-        const port = configUtils.getAvailablePort(config, usedPorts)
-        usedPorts.push(port)
         return {
           deployId: addDeployId,
-          port,
+          port: addPorts[i],
           env: {
             ...s.env,
-            [s.portEnv]: port,
+            [s.portEnv]: addPorts[i],
             [s.baseUrlEnv]: 'https://' + deployId + '.' + config.host
           }
         }
       })
-      const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v }), {})
+      const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v.env }), {})
       console.log(`DEPLOY - ${deployId}: Starting application`)
       const [script, args] = config.startFile.split('--').map(s => s.trim())
       await execPM2('start', {
@@ -288,13 +291,15 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       await utils.execAsync(`cd ${deployPath} && ${pre}`)
     }
 
-    const usedPorts = [currentPort]
-    const addCurrentPorts = await Promise.all(config.additionalServers.map(s => redis.get(getDeploymentId(deployId, s))))
+    const usedAddPorts = []
+    for (const s of config.additionalServers) {
+      const currentPort = await redis.get(getDeploymentId(deployId, s))
+      usedAddPorts.push(currentPort || (await configUtils.getAvailablePort(config, [currentPort, ...usedAddPorts])))
+    }
+
     const additionalData = config.additionalServers.map((a, s, i) => {
       const addDeployId = getDeploymentId(deployId, s)
-      const currentPort = addCurrentPorts[i]
-      const port = currentPort || configUtils.getAvailablePort(config, usedPorts)
-      usedPorts.push(port)
+      const port = usedAddPorts[i]
       return {
         deployId: addDeployId,
         port,
@@ -305,7 +310,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         }
       }
     })
-    const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v }), {})
+    const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v.env }), {})
 
     console.log(`RE-DEPLOY - ${deployId}: Starting application`)
     const [script, args] = config.startFile.split('--').map(s => s.trim())
