@@ -238,7 +238,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
 
       const port = configUtils.getAvailablePort(config)
       const usedPorts = [port]
-      const additionalData = config.additionalServers.reduce((a, s) => {
+      const additionalData = config.additionalServers.map((a, s) => {
         const addDeployId = getDeploymentId(deployId, s)
         const port = configUtils.getAvailablePort(config, usedPorts)
         usedPorts.push(port)
@@ -290,7 +290,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
 
     const usedPorts = [currentPort]
     const addCurrentPorts = await Promise.all(config.additionalServers.map(s => redis.get(getDeploymentId(deployId, s))))
-    const additionalData = config.additionalServers.reduce((a, s, i) => {
+    const additionalData = config.additionalServers.map((a, s, i) => {
       const addDeployId = getDeploymentId(deployId, s)
       const currentPort = addCurrentPorts[i]
       const port = currentPort || configUtils.getAvailablePort(config, usedPorts)
