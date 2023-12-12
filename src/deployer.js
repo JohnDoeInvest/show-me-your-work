@@ -4,7 +4,6 @@ const redis = require('./redis')
 const { BUILDING, REBUILDING, RUNNING } = require('./buildStatusState')
 const fs = require('fs')
 const path = require('path')
-const getPort = require('get-port')
 const util = require('util')
 const configUtils = require('./utils/config')
 const pm2 = require('pm2')
@@ -92,7 +91,7 @@ function runCommand ({ commandType, deployId, config, deployData }) {
   if (commandType === COMMAND_DEPLOY) {
     return deploy(config, deployId, deployData.cloneUrl, deployData.branch, deployData.sha)
   } else if (commandType === COMMAND_REMOVE) {
-    return removeDeployment(deployId)
+    return removeDeployment(deployId, config)
   }
 }
 
@@ -223,25 +222,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     if (currentPort === null || deployPathStat === undefined) {
       // If we have no port but still a deployed path we should remove the entire thing.
       if (deployPathStat !== undefined) {
-        await removeDeployment(deployId)
-      }
-
-      let port
-      if (config.port.includes(':')) {
-        const [min, max] = config.port.split(':').map(s => Number.parseInt(s))
-        const foundPort = await getPort({ port: getPort.makeRange(min, max) })
-        if (foundPort < min || foundPort > max) {
-          throw new Error('Could not find available port for config: ' + JSON.stringify(config))
-        } else {
-          port = foundPort
-        }
-      } else {
-        const foundPort = await getPort({ port: config.port })
-        if (foundPort !== config.port) {
-          throw new Error('Could not find available port for config: ' + JSON.stringify(config))
-        } else {
-          port = foundPort
-        }
+        await removeDeployment(deployId, config)
       }
 
       console.log(`DEPLOY - ${deployId}: Starting`)
@@ -255,6 +236,23 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         await utils.execAsync(`cd ${deployPath} && ${pre}`)
       }
 
+      const port = configUtils.getAvailablePort(config)
+      const usedPorts = [port]
+      const additionalData = config.additionalServers.reduce((a, s) => {
+        const addDeployId = getDeploymentId(deployId, s)
+        const port = configUtils.getAvailablePort(config, usedPorts)
+        usedPorts.push(port)
+        return {
+          deployId: addDeployId,
+          port,
+          env: {
+            ...s.env,
+            [s.portEnv]: port,
+            [s.baseUrlEnv]: 'https://' + deployId + '.' + config.host
+          }
+        }
+      })
+      const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v }), {})
       console.log(`DEPLOY - ${deployId}: Starting application`)
       const [script, args] = config.startFile.split('--').map(s => s.trim())
       await execPM2('start', {
@@ -264,12 +262,16 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         cwd: deployPath,
         env: {
           ...utils.prepareEnvs(config, port),
+          ...additionalEnv,
           PORT: port,
           BASE_URL: 'https://' + deployId + '.' + config.host
         }
       })
 
       await redis.set(deployId, port)
+      for (const data of additionalData) {
+        await redis.set(data.deployId, data.port)
+      }
       console.log(`DEPLOY - ${deployId}: Finished`)
       return updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
     }
@@ -286,6 +288,25 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       await utils.execAsync(`cd ${deployPath} && ${pre}`)
     }
 
+    const usedPorts = [currentPort]
+    const addCurrentPorts = await Promise.all(config.additionalServers.map(s => redis.get(getDeploymentId(deployId, s))))
+    const additionalData = config.additionalServers.reduce((a, s, i) => {
+      const addDeployId = getDeploymentId(deployId, s)
+      const currentPort = addCurrentPorts[i]
+      const port = currentPort || configUtils.getAvailablePort(config, usedPorts)
+      usedPorts.push(port)
+      return {
+        deployId: addDeployId,
+        port,
+        env: {
+          ...s.env,
+          [s.portEnv]: port,
+          [s.baseUrlEnv]: 'https://' + deployId + '.' + config.host
+        }
+      }
+    })
+    const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v }), {})
+
     console.log(`RE-DEPLOY - ${deployId}: Starting application`)
     const [script, args] = config.startFile.split('--').map(s => s.trim())
     await execPM2('stop', name)
@@ -296,10 +317,15 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       cwd: deployPath,
       env: {
         ...utils.prepareEnvs(config, currentPort),
+        ...additionalEnv,
         PORT: currentPort,
         BASE_URL: 'https://' + deployId + '.' + config.host
       }
     })
+    await redis.set(deployId, currentPort)
+    for (const data of additionalData) {
+      await redis.set(data.deployId, data.port)
+    }
 
     console.log(`RE-DEPLOY - ${deployId}: Finished`)
     await updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
@@ -323,11 +349,14 @@ function execPM2 (fun, options) {
   })
 }
 
-function removeDeployment (deployId) {
+function removeDeployment (deployId, config) {
   const statusId = deployId + '-STATUS'
   console.log(deployId + ': Removing deployment')
 
-  return redis.del(deployId, statusId)
+  const additionalServers = config.additionalServers || []
+  const deployIds = [deployId, ...additionalServers.map(s => getDeploymentId(deployId, s))]
+
+  return redis.del(...deployIds, statusId)
     .then(() => {
       return execPM2('delete', deployId)
         .catch(() => Promise.resolve())
@@ -338,6 +367,10 @@ function removeDeployment (deployId) {
       console.log(e.message)
       Promise.resolve()
     })
+}
+
+function getDeploymentId (deployId, addServer) {
+  return deployId + (addServer ? '_' + addServer.subdomain : '')
 }
 
 async function updateStatus (deployId, status, cloneUrl, branch, sha) {

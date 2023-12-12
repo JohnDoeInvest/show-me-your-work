@@ -1,4 +1,5 @@
 const configs = require('../../config.json')
+const getPort = require('get-port')
 
 function getConfigForStatus (info) {
   const repository = info.cloneUrl.replace('https://github.com/', '').slice(0, -4) // Remove '.git'
@@ -64,9 +65,29 @@ function getCheckRunBranch (payload) {
   return payload.check_run.check_suite.head_branch
 }
 
+async function getAvailablePort (config, exclude) {
+  if (config.port.includes(':')) {
+    const [min, max] = config.port.split(':').map(s => Number.parseInt(s))
+    const foundPort = await getPort({ port: getPort.makeRange(min, max), exclude })
+    if (foundPort < min || foundPort > max) {
+      throw new Error('Could not find available port for config: ' + JSON.stringify(config))
+    } else {
+      return foundPort
+    }
+  } else {
+    const foundPort = await getPort({ port: config.port, exclude })
+    if (foundPort !== config.port) {
+      throw new Error('Could not find available port for config: ' + JSON.stringify(config))
+    } else {
+      return foundPort
+    }
+  }
+}
+
 module.exports = {
   getConfigForStatus,
   getConfigForPayload,
   getBranchFromPayload,
-  getCheckRunBranch
+  getCheckRunBranch,
+  getAvailablePort
 }

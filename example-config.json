@@ -14,6 +14,9 @@
       "npm run build:stage"
     ],
     "startFile": "./src/server/index.js",
+    "additionalServers": [
+      { "subdomain": "pro", "portEnv": "PORT_PRO", "baseUrlEnv": "BASE_URL_PRO", "env": {} }
+    ],
     "env": {
       "NODE_ENV": "stage",
       "REDIS_HOST": "127.0.0.1",
