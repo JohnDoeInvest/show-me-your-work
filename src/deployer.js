@@ -243,7 +243,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         addPorts.push(await configUtils.getAvailablePort(config, [port, ...addPorts]))
       }
 
-      const additionalData = config.additionalServers.map((a, s, i) => {
+      const additionalData = config.additionalServers.map((s, i) => {
         const addDeployId = getDeploymentId(deployId, s)
         return {
           deployId: addDeployId,
@@ -297,7 +297,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       usedAddPorts.push(currentPort || (await configUtils.getAvailablePort(config, [currentPort, ...usedAddPorts])))
     }
 
-    const additionalData = config.additionalServers.map((a, s, i) => {
+    const additionalData = config.additionalServers.map((s, i) => {
       const addDeployId = getDeploymentId(deployId, s)
       const port = usedAddPorts[i]
       return {
