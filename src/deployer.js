@@ -251,11 +251,12 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
           env: {
             ...s.env,
             [s.portEnv]: addPorts[i],
-            [s.baseUrlEnv]: 'https://' + deployId + '.' + config.host
+            [s.baseUrlEnv]: 'https://' + addDeployId + '.' + config.host
           }
         }
       })
       const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v.env }), {})
+
       console.log(`DEPLOY - ${deployId}: Starting application`)
       const [script, args] = config.startFile.split('--').map(s => s.trim())
       await execPM2('start', {
@@ -306,7 +307,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         env: {
           ...s.env,
           [s.portEnv]: port,
-          [s.baseUrlEnv]: 'https://' + deployId + '.' + config.host
+          [s.baseUrlEnv]: 'https://' + addDeployId + '.' + config.host
         }
       }
     })
