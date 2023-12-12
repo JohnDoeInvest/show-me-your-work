@@ -293,8 +293,8 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
 
     const usedAddPorts = []
     for (const s of config.additionalServers) {
-      const currentPort = await redis.get(getDeploymentId(deployId, s))
-      usedAddPorts.push(currentPort || (await configUtils.getAvailablePort(config, [currentPort, ...usedAddPorts])))
+      const cAddPort = await redis.get(getDeploymentId(deployId, s))
+      usedAddPorts.push(cAddPort || (await configUtils.getAvailablePort(config, [currentPort, ...usedAddPorts])))
     }
 
     const additionalData = config.additionalServers.map((s, i) => {
