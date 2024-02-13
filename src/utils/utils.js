@@ -1,3 +1,4 @@
+const fs = require('fs')
 const crypto = require('crypto')
 const childProcess = require('child_process')
 
@@ -51,11 +52,25 @@ function execAsync (command, options) {
   })
 }
 
+function writeFileAsync (path, data, options) {
+  return new Promise(function (resolve, reject) {
+    fs.writeFile(path, data, options, (error) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      resolve()
+    })
+  })
+}
+
 module.exports = {
   verifySignature,
   getIdFromPullRequest,
   getIdFromBranch,
   getIdFromTag,
   prepareEnvs,
-  execAsync
+  execAsync,
+  writeFileAsync
 }

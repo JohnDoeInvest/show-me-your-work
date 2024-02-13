@@ -230,11 +230,6 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       await utils.execAsync(`git clone --depth=50 --branch=${branch} ${url} ${deployPath}`)
       console.log(`DEPLOY - ${deployId}: Installing dependencies`)
       await utils.execAsync(`cd ${deployPath} && git checkout -qf ${sha}`)
-      console.log(`DEPLOY - ${deployId}: Running pre-start commands`)
-
-      for (const pre of config.pre) {
-        await utils.execAsync(`cd ${deployPath} && ${pre}`)
-      }
 
       const port = await configUtils.getAvailablePort(config)
       const addPorts = []
@@ -256,6 +251,18 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         }
       })
       const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v.env }), {})
+      const envs = {
+        ...utils.prepareEnvs(config, port),
+        ...additionalEnv,
+        PORT: port,
+        BASE_URL: 'https://' + deployId + '.' + config.host
+      }
+
+      console.log(`DEPLOY - ${deployId}: Running pre-start commands`)
+      await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).map('\n'))
+      for (const pre of config.pre) {
+        await utils.execAsync(`cd ${deployPath} && ${pre}`, { })
+      }
 
       console.log(`DEPLOY - ${deployId}: Starting application`)
       const [script, args] = config.startFile.split('--').map(s => s.trim())
@@ -263,13 +270,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         name,
         script,
         args,
-        cwd: deployPath,
-        env: {
-          ...utils.prepareEnvs(config, port),
-          ...additionalEnv,
-          PORT: port,
-          BASE_URL: 'https://' + deployId + '.' + config.host
-        }
+        cwd: deployPath
       })
 
       await redis.set(deployId, port)
@@ -286,11 +287,6 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     await utils.execAsync(`cd ${deployPath} && git fetch`)
     console.log(`RE-DEPLOY - ${deployId}: Installing dependencies`)
     await utils.execAsync(`cd ${deployPath} && git checkout -qf ${sha}`)
-    console.log(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
-
-    for (const pre of config.pre) {
-      await utils.execAsync(`cd ${deployPath} && ${pre}`)
-    }
 
     const usedAddPorts = []
     for (const s of config.additionalServers) {
@@ -313,6 +309,19 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     })
     const additionalEnv = additionalData.reduce((a, v) => ({ ...a, ...v.env }), {})
 
+    const envs = {
+      ...utils.prepareEnvs(config, currentPort),
+      ...additionalEnv,
+      PORT: currentPort,
+      BASE_URL: 'https://' + deployId + '.' + config.host
+    }
+
+    console.log(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
+    await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).map('\n'))
+    for (const pre of config.pre) {
+      await utils.execAsync(`cd ${deployPath} && ${pre}`)
+    }
+
     console.log(`RE-DEPLOY - ${deployId}: Starting application`)
     const [script, args] = config.startFile.split('--').map(s => s.trim())
     await execPM2('stop', name)
@@ -320,13 +329,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       name,
       script,
       args,
-      cwd: deployPath,
-      env: {
-        ...utils.prepareEnvs(config, currentPort),
-        ...additionalEnv,
-        PORT: currentPort,
-        BASE_URL: 'https://' + deployId + '.' + config.host
-      }
+      cwd: deployPath
     })
     await redis.set(deployId, currentPort)
     for (const data of additionalData) {
