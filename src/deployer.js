@@ -259,7 +259,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       }
 
       console.log(`DEPLOY - ${deployId}: Running pre-start commands`)
-      await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).map('\n'))
+      await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).join('\n'))
       for (const pre of config.pre) {
         await utils.execAsync(`cd ${deployPath} && ${pre}`, { })
       }
@@ -317,7 +317,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     }
 
     console.log(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
-    await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).map('\n'))
+    await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).join('\n'))
     for (const pre of config.pre) {
       await utils.execAsync(`cd ${deployPath} && ${pre}`)
     }
