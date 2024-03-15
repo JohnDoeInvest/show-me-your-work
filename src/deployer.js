@@ -271,11 +271,9 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         script,
         args,
         cwd: deployPath,
-        env: Object.keys(envs).reduce((a, key) => {
-          a[key] = null
-          return a
-        }, {})
+        env: envs
       })
+      await execPM2('dump')
 
       await redis.set(deployId, port)
       for (const data of additionalData) {
@@ -334,11 +332,10 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       script,
       args,
       cwd: deployPath,
-      env: Object.keys(envs).reduce((a, key) => {
-        a[key] = null
-        return a
-      }, {})
+      env: envs
     })
+    await execPM2('dump')
+
     await redis.set(deployId, currentPort)
     for (const data of additionalData) {
       await redis.set(data.deployId, data.port)
