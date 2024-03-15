@@ -352,14 +352,20 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
 
 function execPM2 (fun, options) {
   return new Promise((resolve, reject) => {
-    pm2[fun](options, err => {
+    const errBackFunc = err => {
       if (err) {
         reject(err)
         return
       }
 
       resolve()
-    })
+    }
+
+    if (options) {
+      pm2[fun](options, errBackFunc)
+    } else {
+      pm2[fun](errBackFunc)
+    }
   })
 }
 
