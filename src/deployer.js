@@ -270,7 +270,8 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         name,
         script,
         args,
-        cwd: deployPath
+        cwd: deployPath,
+        env: {}
       })
 
       await redis.set(deployId, port)
@@ -329,7 +330,8 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       name,
       script,
       args,
-      cwd: deployPath
+      cwd: deployPath,
+      env: {}
     })
     await redis.set(deployId, currentPort)
     for (const data of additionalData) {
