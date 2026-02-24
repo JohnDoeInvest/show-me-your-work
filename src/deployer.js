@@ -263,7 +263,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       logger.info(`DEPLOY - ${deployId}: Running pre-start commands`)
       await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).join('\n'))
       for (const pre of config.pre) {
-        await utils.execAsync(`cd ${deployPath} && ${pre}`, { })
+        await utils.execAsync(`cd ${deployPath} && ${pre}`, { env: { ...process.env, NODE_ENV: null } })
       }
 
       logger.info(`DEPLOY - ${deployId}: Starting application`)
@@ -323,7 +323,7 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
     logger.info(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
     await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).join('\n'))
     for (const pre of config.pre) {
-      await utils.execAsync(`cd ${deployPath} && ${pre}`)
+      await utils.execAsync(`cd ${deployPath} && ${pre}`, { env: { ...process.env, NODE_ENV: null } })
     }
 
     logger.info(`RE-DEPLOY - ${deployId}: Starting application`)
