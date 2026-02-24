@@ -9,6 +9,8 @@ const deployer = require('./deployer')
 const buildStatus = require('./buildStatus')
 const WebSocket = require('ws')
 
+const logger = require('jdi-nodejs-logger')
+
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'testing'
 const PORT = process.env.PORT || 3000
 
@@ -34,7 +36,7 @@ app.post('/', (req, res) => {
 
   return handleEvent(eventType, req.body)
     .catch(err => {
-      console.error(err)
+      logger.error(err)
     })
 })
 
@@ -56,14 +58,14 @@ function handleEvent (eventType, payload) {
 
 pm2.connect(err => {
   if (err) {
-    console.error(err)
+    logger.error(err)
     process.exit(2)
   }
 
   deployer.checkStatus().then(() => {
-    server.listen(PORT, () => console.log(`Listening to port ${PORT}`))
+    server.listen(PORT, () => logger.info(`Listening to port ${PORT}`))
   }).catch((e) => {
-    console.error(e)
+    logger.error(e)
     process.exit(1)
   })
 })

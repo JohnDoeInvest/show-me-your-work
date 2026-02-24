@@ -9,6 +9,8 @@ const configUtils = require('./utils/config')
 const pm2 = require('pm2')
 const fetch = require('node-fetch').default
 
+const logger = require('jdi-nodejs-logger')
+
 const statAsync = util.promisify(fs.stat)
 const rmDirAsync = util.promisify(fs.rmdir)
 const GITHUB_ACCESS_TOKEN = process.env.GITHUB_ACCESS_TOKEN
@@ -225,10 +227,10 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         await removeDeployment(deployId, config)
       }
 
-      console.log(`DEPLOY - ${deployId}: Starting`)
+      logger.info(`DEPLOY - ${deployId}: Starting`)
       await updateStatus(deployId, BUILDING, cloneUrl, branch, sha)
       await utils.execAsync(`git clone --depth=50 --branch=${branch} ${url} ${deployPath}`)
-      console.log(`DEPLOY - ${deployId}: Installing dependencies`)
+      logger.info(`DEPLOY - ${deployId}: Installing dependencies`)
       await utils.execAsync(`cd ${deployPath} && git checkout -qf ${sha}`)
 
       const port = await configUtils.getAvailablePort(config)
@@ -258,13 +260,13 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
         BASE_URL: 'https://' + deployId + '.' + config.host
       }
 
-      console.log(`DEPLOY - ${deployId}: Running pre-start commands`)
+      logger.info(`DEPLOY - ${deployId}: Running pre-start commands`)
       await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).join('\n'))
       for (const pre of config.pre) {
         await utils.execAsync(`cd ${deployPath} && ${pre}`, { })
       }
 
-      console.log(`DEPLOY - ${deployId}: Starting application`)
+      logger.info(`DEPLOY - ${deployId}: Starting application`)
       const [script, args] = config.startFile.split('--').map(s => s.trim())
       await execPM2('start', {
         name,
@@ -279,15 +281,15 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       for (const data of additionalData) {
         await redis.set(data.deployId, data.port)
       }
-      console.log(`DEPLOY - ${deployId}: Finished`)
+      logger.info(`DEPLOY - ${deployId}: Finished`)
       return updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
     }
 
     // We already have a deployment running so we should update that
-    console.log(`RE-DEPLOY - ${deployId}: Starting`)
+    logger.info(`RE-DEPLOY - ${deployId}: Starting`)
     await updateStatus(deployId, REBUILDING, cloneUrl, branch, sha)
     await utils.execAsync(`cd ${deployPath} && git fetch`)
-    console.log(`RE-DEPLOY - ${deployId}: Installing dependencies`)
+    logger.info(`RE-DEPLOY - ${deployId}: Installing dependencies`)
     await utils.execAsync(`cd ${deployPath} && git checkout -qf ${sha}`)
 
     const usedAddPorts = []
@@ -318,13 +320,13 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       BASE_URL: 'https://' + deployId + '.' + config.host
     }
 
-    console.log(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
+    logger.info(`RE-DEPLOY - ${deployId}: Running pre-start commands`)
     await utils.writeFileAsync(`${deployPath}/.env`, Object.entries(envs).map(([key, value]) => `${key}=${value}`).join('\n'))
     for (const pre of config.pre) {
       await utils.execAsync(`cd ${deployPath} && ${pre}`)
     }
 
-    console.log(`RE-DEPLOY - ${deployId}: Starting application`)
+    logger.info(`RE-DEPLOY - ${deployId}: Starting application`)
     const [script, args] = config.startFile.split('--').map(s => s.trim())
     await execPM2('stop', name)
     await execPM2('start', {
@@ -341,11 +343,11 @@ async function deploy (config, deployId, cloneUrl, branch, sha) {
       await redis.set(data.deployId, data.port)
     }
 
-    console.log(`RE-DEPLOY - ${deployId}: Finished`)
+    logger.info(`RE-DEPLOY - ${deployId}: Finished`)
     await updateStatus(deployId, RUNNING, cloneUrl, branch, sha)
     return Promise.resolve()
   } catch (e) {
-    console.log(`${deployId}: Aborted`, e)
+    logger.error(`${deployId}: Aborted`, e)
     return Promise.resolve()
   }
 }
@@ -371,7 +373,7 @@ function execPM2 (fun, options) {
 
 function removeDeployment (deployId, config) {
   const statusId = deployId + '-STATUS'
-  console.log(deployId + ': Removing deployment')
+  logger.info(deployId + ': Removing deployment')
 
   const additionalServers = config.additionalServers || []
   const deployIds = [deployId, ...additionalServers.map(s => getDeploymentId(deployId, s))]
@@ -382,9 +384,9 @@ function removeDeployment (deployId, config) {
         .catch(() => Promise.resolve())
     })
     .then(() => rmDirAsync(path.resolve('deploys', deployId), { recursive: true }))
-    .then(() => console.log(deployId + ': Removed deployment'))
+    .then(() => logger.info(deployId + ': Removed deployment'))
     .catch(e => {
-      console.log(e.message)
+      logger.error(e.message)
       Promise.resolve()
     })
 }

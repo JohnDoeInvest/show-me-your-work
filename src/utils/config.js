@@ -1,6 +1,8 @@
 const configs = require('../../config.json')
 const getPort = require('get-port')
 
+const logger = require('jdi-nodejs-logger')
+
 function getConfigForStatus (info) {
   const repository = info.cloneUrl.replace('https://github.com/', '').slice(0, -4) // Remove '.git'
   const branch = info.branch
@@ -37,7 +39,7 @@ function getConfigForRepository (repository, branch) {
   }
 
   if (matchingConfigs.length > 1) {
-    console.warn('Multiple matching configs for: ' + JSON.stringify({
+    logger.warn('Multiple matching configs for: ' + JSON.stringify({
       branch,
       repository
     }) + ' selecting first found')

@@ -3,9 +3,11 @@ const redisUtils = require('./utils/redisUtils')
 const express = require('express')
 const WebSocket = require('ws')
 
+const logger = require('jdi-nodejs-logger')
+
 const LINK_HOST = process.env.LINK_HOST
 if (LINK_HOST === undefined || LINK_HOST === null || LINK_HOST === '') {
-  console.error('Error: Missing environment variable LINK_HOST, should be set like LINK_HOST=example.com')
+  logger.error('Error: Missing environment variable LINK_HOST, should be set like LINK_HOST=example.com')
   process.exit(1)
 }
 
@@ -30,7 +32,7 @@ function start (ws) {
         getBuildStatus().then(statuses => {
           app.render('table', { statuses, linkHost: LINK_HOST }, (err, html) => {
             if (err) {
-              console.error(err)
+              logger.error(err)
               return
             }
             broadcast(ws, JSON.stringify({ html, event: 'status' }))
@@ -40,7 +42,7 @@ function start (ws) {
         getBuildQueue().then(queue => {
           app.render('queue', { queue }, (err, html) => {
             if (err) {
-              console.error(err)
+              logger.error(err)
               return
             }
             broadcast(ws, JSON.stringify({ html, event: 'queue' }))
